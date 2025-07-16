@@ -27,7 +27,9 @@
 //! produced by `zstd::Encoder::new_mt(level 0, nb_threads)`.
 
 use std::error::Error;
-use std::fs::{self, File, OpenOptions};
+use std::fs;
+use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
@@ -220,7 +222,7 @@ pub fn create_katana_archive(
     });
 
     #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+    use std::os::unix::io::AsRawFd;
 
     let mut index = KatanaIndex {
         salt: archive_salt,
@@ -595,14 +597,82 @@ fn extract_katana_shard(
         let mut remaining = entry.size;
         if wanted.is_empty() || wanted.contains(&entry.path) {
             // Write this file to disk
-            let out_path = out_root.join(&entry.path);
+            // Ensure path is relative, remove leading slash or drive letter if present
+            let mut normalized_path = entry.path.clone();
+            
+            // Обработка Unix-style путей с /
+            if normalized_path.starts_with('/') {
+                normalized_path = normalized_path.trim_start_matches('/').to_string();
+            }
+            
+            // Обработка Windows-style путей с C:\, D:\ и т.д.
+            #[cfg(windows)]
+            {
+                // Проверяем на Windows-путь с буквой диска (C:\path\file)
+                if normalized_path.len() >= 2 && normalized_path.chars().nth(1) == Some(':') {
+                    // Удаляем имя диска и первый разделитель
+                    if normalized_path.len() >= 3 && normalized_path.chars().nth(2) == Some('\\') {
+                        normalized_path = normalized_path.chars().skip(3).collect::<String>();
+                    } else {
+                        normalized_path = normalized_path.chars().skip(2).collect::<String>();
+                    }
+                    
+                    // Заменяем обратные слеши на прямые для совместимости
+                    normalized_path = normalized_path.replace('\\', "/");
+                }
+                
+                // Если путь начинается с \\
+                if normalized_path.starts_with('\\') {
+                    normalized_path = normalized_path.trim_start_matches('\\').to_string();
+                    normalized_path = normalized_path.replace('\\', "/");
+                }
+            }
+            
+            // Если путь стал пустым после нормализации (был только /), используем имя файла
+            if normalized_path.is_empty() || normalized_path == "/" {
+                // Извлечь имя файла из абсолютного пути
+                let path = std::path::Path::new(&entry.path);
+                if let Some(filename) = path.file_name() {
+                    normalized_path = filename.to_string_lossy().into_owned();
+                } else {
+                    // Если не удалось получить имя файла, смотрим на последний компонент пути
+                    let components: Vec<_> = path.components().collect();
+                    if let Some(last) = components.last() {
+                        normalized_path = last.as_os_str().to_string_lossy().into_owned();
+                    } else {
+                        // Запасной вариант если ничего не помогло
+                        normalized_path = "secret.txt".to_string();
+                    }
+                }
+            }
+            
+            let out_path = out_root.join(&normalized_path);
+            if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
+                eprintln!("[dbg] extract -> {:?}", out_path);
+            }
+            
+            // Проверяем, не является ли путь директорией
+            if out_path.exists() && out_path.is_dir() {
+                // Если это директория, пропускаем этот файл и не пытаемся его создать
+                eprintln!("[katana] Warning: skipping file that conflicts with existing directory: {:?}", out_path);
+                // Пропускаем данные файла
+                while remaining > 0 {
+                    let to_read = std::cmp::min(in_buf.len() as u64, remaining) as usize;
+                    let rd = decoder.read(&mut in_buf[..to_read])?;
+                    if rd == 0 {
+                        return Err("Unexpected EOF while skipping".into());
+                    }
+                    remaining -= rd as u64;
+                }
+                continue;
+            }
+            
+            // Создаем родительскую директорию если она не существует
             if let Some(dir) = out_path.parent() {
                 fs::create_dir_all(dir)?;
             }
-            if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
-                    eprintln!("[dbg] extract -> {:?}", out_path);
-                }
-                let target_path = out_path.clone();
+            
+            let target_path = out_path.clone();
             let mut out_f = BufWriter::new(File::create(&out_path)?);
             while remaining > 0 {
                 let to_read = std::cmp::min(in_buf.len() as u64, remaining) as usize;

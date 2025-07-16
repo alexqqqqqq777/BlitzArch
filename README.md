@@ -18,6 +18,7 @@
 - **Massively Parallel**: Utilizes all available CPU cores for both compression and decompression to minimize processing time.
 - **Optimized I/O**: Employs techniques like memory-mapped files and sharded workers to reduce I/O bottlenecks.
 - **The `.blz` (Katana) Format**: A custom, highly parallelizable archive format designed from the ground up for maximum extraction speed.
+- **Cross-Platform Compatible**: Robust path handling that works consistently across Windows, macOS, and Linux.
 - **Strong Encryption**: AES-256-GCM authenticated encryption to keep your data secure.
 
 ## Installation

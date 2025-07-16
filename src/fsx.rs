@@ -10,14 +10,17 @@
 use std::io;
 use std::path::Path;
 
-// We no longer re-export the standard fs module directly to avoid import conflicts.
-// Instead, callers should explicitly import what they need from std::fs.
+// We DO NOT re-export std::fs directly to avoid conflicts and cross-platform issues
+// Instead, callers should explicitly import std::fs::File, etc.
 
 /// Return POSIX mode bits if available (Unix), otherwise 0.
 #[inline]
 pub fn unix_mode(meta: &std::fs::Metadata) -> u32 {
     #[cfg(unix)]
-    { use std::os::unix::fs::PermissionsExt; meta.permissions().mode() }
+    { 
+        use std::os::unix::fs::PermissionsExt; 
+        meta.permissions().mode() 
+    }
     #[cfg(not(unix))]
     { 0 }
 }
@@ -46,6 +49,7 @@ pub fn set_unix_permissions(path: &Path, mode: u32) -> io::Result<()> {
 #[cfg(not(unix))]
 #[inline]
 pub fn set_unix_permissions(_path: &Path, _mode: u32) -> io::Result<()> {
+    // On Windows, permissions are handled differently
     Ok(())
 }
 

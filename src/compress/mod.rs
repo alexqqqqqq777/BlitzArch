@@ -15,11 +15,11 @@ use crate::ArchiverError;
 
 use jwalk;
 use std::io::Write;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Read, Seek};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode() helper
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tempfile::NamedTempFile;
 

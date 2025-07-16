@@ -3,8 +3,8 @@ use tempfile::{NamedTempFile, TempPath};
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt; // mode()
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::unix::fs::PermissionsExt; // for mode()
 // use of raw fd not required in hybrid stream variant
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
