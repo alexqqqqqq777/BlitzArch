@@ -45,9 +45,15 @@ jobs:
 
       - name: Package MSI
         run: |
-          PATH="C:\Program Files (x86)\WiX Toolset v3.11\bin;$PATH"
-          candle installer/blitzarch.wxs -o installer/blitzarch.wixobj
-          light -ext WixUIExtension installer/blitzarch.wixobj -o BlitzArch.msi
+          $env:PATH = "C:\Program Files (x86)\WiX Toolset v3.11\bin;$env:PATH"
+          # Check if build_msi.bat exists, if so use it, otherwise use direct candle/light commands
+          if (Test-Path -Path "./installer/build_msi.bat") {
+            ./installer/build_msi.bat
+          } else {
+            candle installer/blitzarch.wxs -o installer/blitzarch.wixobj
+            light -ext WixUIExtension installer/blitzarch.wixobj -o BlitzArch.msi
+          }
+        shell: pwsh
 
       - uses: actions/upload-artifact@v4
         with:
