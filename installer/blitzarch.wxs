@@ -6,8 +6,8 @@
         light -ext WixUIExtension blitzarch.wixobj -o BlitzArch.msi
 
     Notes:
-    • This is a *minimal* template. Adjust upgrade GUIDs, icons, shortcuts, EULA, etc.
-    • Output EXE path assumes cargo build --release.
+    - This is a *minimal* template. Adjust upgrade GUIDs, icons, shortcuts, EULA, etc.
+    - Output EXE path assumes cargo build --release.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
