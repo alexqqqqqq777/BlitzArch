@@ -1,4 +1,4 @@
-НЕ# BlitzArch Dual Licensing
+# BlitzArch Dual Licensing
 
 BlitzArch is released under a **dual-license** model to provide maximum flexibility.
 
