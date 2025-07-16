@@ -41,7 +41,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: Install WiX Toolset
-        run: choco install wix -y
+        run: choco install wixtoolset -y
 
       - name: Package MSI
         run: |
