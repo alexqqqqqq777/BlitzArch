@@ -15,7 +15,7 @@
            Language="1033"
            Version="0.1.0"
            Manufacturer="BlitzArch Project"
-           UpgradeCode="PUT-GUID-HERE-0000-0000-000000000000">
+           UpgradeCode="A2F47D19-2F4B-4A09-9E2F-7C2A6F4C9C1D">
 
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
 
