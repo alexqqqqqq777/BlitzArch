@@ -221,7 +221,8 @@ pub fn create_katana_archive(
         <[u8; 16]>::try_from(v).unwrap()
     });
 
-    use std::os::unix::io::AsRawFd;
+    #[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 
     let mut index = KatanaIndex {
         salt: archive_salt,
