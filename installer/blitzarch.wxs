@@ -3,11 +3,11 @@
     WiX Toolset installer definition for BlitzArch.
     Build with:
         candle blitzarch.wxs
-        light -ext WixUIExtension blitzarch.wixobj -o BlitzArch.msi
+        light.exe with WixUIExtension
 
     Notes:
-    - This is a *minimal* template. Adjust upgrade GUIDs, icons, shortcuts, EULA, etc.
-    - Output EXE path assumes cargo build --release.
+    * This is a minimal template. Adjust upgrade GUIDs, icons, shortcuts, EULA, etc.
+    * Output EXE path assumes cargo build release mode.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
