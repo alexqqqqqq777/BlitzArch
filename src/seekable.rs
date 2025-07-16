@@ -267,7 +267,7 @@ pub fn extract_seekable_archive(archive: &Path, output_dir: &Path) -> Result<(),
                 if remaining == 0 {
                     // finish file
                     if let Some(mode) = current.permissions {
-                        fs::set_permissions(output_dir.join(&current.path), fs::Permissions::from_mode(mode))?;
+                        crate::fsx::set_unix_permissions(&output_dir.join(&current.path), mode)?;
                     }
                     current = match entry_iter.next() { Some(e)=>e, None=> return Ok(()) };
                     out = {
@@ -327,7 +327,7 @@ pub fn extract_seekable_archive(archive: &Path, output_dir: &Path) -> Result<(),
                 if remaining == 0 {
                     // finish file
                     if let Some(mode) = current.permissions {
-                        fs::set_permissions(output_dir.join(&current.path), fs::Permissions::from_mode(mode))?;
+                        crate::fsx::set_unix_permissions(&output_dir.join(&current.path), mode)?;
                     }
                     current = match entry_iter.next() { Some(e)=>e, None=> return Ok(()) };
                     out = {

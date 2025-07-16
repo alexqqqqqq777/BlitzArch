@@ -31,6 +31,7 @@ use crate::fsx as fs;
 use fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -211,6 +212,7 @@ pub fn create_katana_archive(
     use crossbeam_channel::bounded;
     // Channel capacity 1 → workers block until coordinator writes, limiting peak RAM
     let (meta_tx, meta_rx) = bounded::<(usize, Vec<u8>, u64, Vec<FileEntry>, Option<[u8; 12]>)>(1);
+    #[cfg(unix)]
     let _out_fd = out_file.as_raw_fd();
 
     // Generate single salt if encryption enabled
@@ -563,7 +565,7 @@ fn extract_katana_shard(
             }
             out_f.flush()?;
             if let Some(perm) = entry.permissions {
-                fs::set_permissions(&out_path, fs::Permissions::from_mode(perm))?;
+                crate::fsx::set_unix_permissions(&out_path, perm)?;
             }
         } else {
             // Skip this file's bytes

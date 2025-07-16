@@ -76,7 +76,7 @@ fn extract_from_decoder(
         {
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = file_entry.permissions {
-                fs::set_permissions(&target_path, std::fs::Permissions::from_mode(mode))?;
+                crate::fsx::set_unix_permissions(&target_path, mode)?;
             }
         }
 
@@ -181,7 +181,7 @@ fn extract_store_bundle_zero_copy(
         io::copy(&mut limited_reader, &mut out)?;
 
         if let Some(mode) = entry.permissions {
-            fs::set_permissions(&target_path, Permissions::from_mode(mode))?;
+            crate::fsx::set_unix_permissions(&target_path, mode)?;
         }
     }
     Ok(())
@@ -264,7 +264,7 @@ pub fn extract_bundle_parallel(
         }
 
         if let Some(mode) = entry.permissions {
-            fs::set_permissions(&target_path, Permissions::from_mode(mode))?;
+            crate::fsx::set_unix_permissions(&target_path, mode)?;
         }
         Ok(())
     })?;

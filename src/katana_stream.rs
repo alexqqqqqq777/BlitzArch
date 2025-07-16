@@ -3,6 +3,7 @@ use tempfile::{NamedTempFile, TempPath};
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // for mode()
 // use of raw fd not required in hybrid stream variant
 use std::path::{Path, PathBuf};
@@ -161,7 +162,12 @@ pub fn create_katana_archive(
                         path: normalized_path,
                         size: meta.len(),
                         offset: uncompressed, // record current offset before writing
-                        permissions: Some(meta.permissions().mode()),
+                        permissions: {
+                            #[cfg(unix)]
+                            { Some(meta.permissions().mode()) }
+                            #[cfg(not(unix))]
+                            { None }
+                        },
                     });
                     loop {
                         let rd = f.read(&mut in_buf).expect("read");

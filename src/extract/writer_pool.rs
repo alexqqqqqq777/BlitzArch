@@ -57,7 +57,7 @@ pub fn flush_files(decoded: &[u8], files: &[FileIndexEntry], base: &Path) -> io:
                 {
                     use std::os::unix::fs::PermissionsExt;
                     if let Some(mode) = entry.permissions {
-                        fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+                        crate::fsx::set_unix_permissions(&target_path, mode)?;
                     }
                 }
             } else {
@@ -98,7 +98,7 @@ pub fn flush_files(decoded: &[u8], files: &[FileIndexEntry], base: &Path) -> io:
             {
                 use std::os::unix::fs::PermissionsExt;
                 if let Some(mode) = entry.permissions {
-                    fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+                    crate::fsx::set_unix_permissions(&target_path, mode)?;
                 }
             }
             continue;
