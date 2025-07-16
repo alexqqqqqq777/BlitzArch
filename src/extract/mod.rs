@@ -85,6 +85,28 @@ impl ArchiveReader {
 /// # Arguments
 /// * `file` - The archive file to read.
 pub fn list_files(file: File) -> Result<(), Box<dyn Error>> {
+    // Проверяем, является ли файл Katana-архивом, для этого нам нужно сохранить файл
+    // во временное место, т.к. is_katana_archive требует Path
+    let tempdir = tempfile::tempdir()?;
+    let temp_path = tempdir.path().join("temp_archive.blz");
+    let mut file_copy = File::create(&temp_path)?;
+    
+    // Копируем содержимое исходного файла во временный
+    {
+        let mut orig_file = file;
+        orig_file.seek(std::io::SeekFrom::Start(0))?;
+        std::io::copy(&mut orig_file, &mut file_copy)?;
+        file_copy.flush()?;
+    }
+    
+    // Проверяем, является ли файл Katana-архивом
+    if crate::katana::is_katana_archive(&temp_path)? {
+        // Если да, используем функцию list_katana_files
+        return crate::katana::list_katana_files(&temp_path, None);
+    }
+    
+    // Если нет, обрабатываем как обычный архив
+    let file = File::open(&temp_path)?;
     let mut reader = ArchiveReader::new(file)?;
     let index = reader.read_footer_and_index()?;
 

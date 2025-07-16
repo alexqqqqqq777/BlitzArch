@@ -399,6 +399,57 @@ pub fn extract_katana_archive(
     extract_katana_archive_internal(archive_path, output_dir, &[], password)
 }
 
+/// Lists all files in a Katana archive without extracting them.
+///
+/// This function reads the index of a Katana archive and prints the list of contained files.
+///
+/// # Arguments
+/// * `archive_path` - The path to the Katana archive file.
+/// * `password` - Optional password for encrypted archives.
+pub fn list_katana_files(
+    archive_path: &Path,
+    password: Option<String>,
+) -> Result<(), Box<dyn Error>> {
+    let mut f = File::open(archive_path)?;
+    let len = f.metadata()?.len();
+    if len < 24 {
+        return Err("File too small".into());
+    }
+    // Read footer
+    f.seek(SeekFrom::End(-24))?;
+    let mut buf_footer = [0u8; 24];
+    f.read_exact(&mut buf_footer)?;
+    let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
+    let (idx_json_size_bytes, magic_bytes) = rest.split_at(8);
+    if magic_bytes != KATANA_MAGIC {
+        return Err("Not a Katana archive".into());
+    }
+    let idx_comp_size = u64::from_le_bytes(idx_comp_size_bytes.try_into().unwrap());
+    let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
+
+    // Read compressed index
+    let idx_comp_offset = len - 24 - idx_comp_size;
+    f.seek(SeekFrom::Start(idx_comp_offset))?;
+    let mut idx_comp = vec![0u8; idx_comp_size as usize];
+    f.read_exact(&mut idx_comp)?;
+    let idx_json = zstd::decode_all(&*idx_comp)?;
+    let index: KatanaIndex = serde_json::from_slice(&idx_json)?;
+    
+    // Print archive information
+    if index.salt.is_some() && password.is_none() {
+        println!("Archive is encrypted.");
+    }
+    
+    println!("Archive Index ({} files):", index.files.len());
+    
+    // Print the list of files
+    for file in &index.files {
+        println!("- {} ({} bytes)", file.path, file.size);
+    }
+    
+    Ok(())
+}
+
 /// Internal helper that accepts a list of files to extract. Empty slice ⇒ extract all.
 pub fn extract_katana_archive_internal(
     archive_path: &Path,
