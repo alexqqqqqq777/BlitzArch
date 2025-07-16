@@ -152,8 +152,12 @@ pub fn extract_files(
         if entry.is_dir {
             let target_path = base_output_path.join(&entry.path);
             fs::create_dir_all(&target_path)?;
-            if let Some(mode) = entry.permissions {
-                fs::set_permissions(&target_path, Permissions::from_mode(mode))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Some(mode) = entry.permissions {
+                    crate::fsx::set_unix_permissions(&target_path, mode)?;
+                }
             }
         }
     }
@@ -266,8 +270,12 @@ pub fn extract_files(
                 io::copy(&mut decoder.take(file_entry.uncompressed_size), &mut output_file)?;
             }
 
-            if let Some(mode) = file_entry.permissions {
-                fs::set_permissions(&target_path, Permissions::from_mode(mode))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Some(mode) = file_entry.permissions {
+                    crate::fsx::set_unix_permissions(&target_path, mode)?;
+                }
             }
         }
         Ok(())

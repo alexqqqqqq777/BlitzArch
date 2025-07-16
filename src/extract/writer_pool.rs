@@ -53,8 +53,12 @@ pub fn flush_files(decoded: &[u8], files: &[FileIndexEntry], base: &Path) -> io:
             }
             if entry.is_dir {
                 fs::create_dir_all(&target_path)?;
-                if let Some(mode) = entry.permissions {
-                    fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Some(mode) = entry.permissions {
+                        fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+                    }
                 }
             } else {
                 let mut f = File::create(&target_path)?;
@@ -90,8 +94,12 @@ pub fn flush_files(decoded: &[u8], files: &[FileIndexEntry], base: &Path) -> io:
 
         if entry.is_dir {
             fs::create_dir_all(&target_path)?;
-            if let Some(mode) = entry.permissions {
-                fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Some(mode) = entry.permissions {
+                    fs::set_permissions(&target_path, fs::Permissions::from_mode(mode))?;
+                }
             }
             continue;
         }

@@ -72,8 +72,12 @@ fn extract_from_decoder(
         // Copy exact uncompressed file bytes
         io::copy(&mut decoder.take(file_entry.uncompressed_size), &mut output_file)?;
 
-        if let Some(mode) = file_entry.permissions {
-            fs::set_permissions(&target_path, Permissions::from_mode(mode))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Some(mode) = file_entry.permissions {
+                fs::set_permissions(&target_path, std::fs::Permissions::from_mode(mode))?;
+            }
         }
 
         current_offset_in_bundle = file_entry.offset_in_bundle + stored_sz;
