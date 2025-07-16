@@ -27,14 +27,12 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      # Configure environment for static linking
+      - name: Setup environment variables
+        run: echo "RUSTFLAGS=-Ctarget-feature=+crt-static" >> $env:GITHUB_ENV
+
       - name: Build (debug)
         run: cargo build --verbose
-      - name: Setup Rust for static linking
-        run: |
-          # Configure Rust to use the MSVC static CRT
-          New-Item -Path $env:USERPROFILE\.cargo -ItemType Directory -Force
-          Set-Content -Path $env:USERPROFILE\.cargo\config.toml -Value "[target.x86_64-pc-windows-msvc]`nrustflags = [`"-Ctarget-feature=+crt-static`"]"
-          cat $env:USERPROFILE\.cargo\config.toml
       - name: Run tests
         run: cargo test --all --verbose
       - name: Build (release)
