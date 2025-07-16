@@ -9,13 +9,12 @@
 //! added later, but even this simple grouping removes tens of thousands of
 //! syscalls for datasets with many tiny files.
 
-use crate::fsx as fs;
-use fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
-use fs::Permissions;
+use std::fs::Permissions;
 use std::path::{Path, PathBuf};
 
 use crate::archive::FileIndexEntry;

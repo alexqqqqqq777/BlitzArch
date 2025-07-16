@@ -221,8 +221,8 @@ impl ArchiveWriter {
             (data, None)
         };
 
-        self.writer.seek(SeekFrom::Start(self.current_offset))?;
-        self.writer.write_all(&data_to_write)?;
+        self.writer.seek(SeekFrom::Start(self.current_offset))?
+            .write_all(&data_to_write)?;
         let compressed_size = data_to_write.len() as u64;
 
         self.index.bundles.push(BundleInfo {
@@ -247,6 +247,8 @@ impl ArchiveWriter {
             (data.to_vec(), None)
         };
 
+        // Позиционируемся на текущее смещение, чтобы не затереть заголовок
+        self.writer.seek(SeekFrom::Start(self.current_offset))?;
         self.writer.write_all(&data_to_write)?;
         let compressed_size = data_to_write.len() as u64;
 
@@ -300,21 +302,6 @@ impl ArchiveWriter {
     ///
     /// This method consumes the writer and must be called to produce a valid archive.
     pub fn finalize(mut self) -> Result<(), ArchiverError> {
-        // Обновляем заголовок с актуальным количеством файлов перед записью индекса
-        self.index.header.file_count = self.index.entries.len() as u64;
-        let updated_header_bytes = serde_json::to_vec(&self.index.header)?;
-        self.writer.seek(SeekFrom::Start(MAGIC_BYTES.len() as u64))?;
-        
-        // Записываем только JSON часть заголовка (после magic bytes)
-        let mut padded_header = updated_header_bytes.clone();
-        if padded_header.len() < (HEADER_SIZE as usize - MAGIC_BYTES.len()) {
-            padded_header.resize(HEADER_SIZE as usize - MAGIC_BYTES.len(), 0);
-        }
-        padded_header.truncate(HEADER_SIZE as usize - MAGIC_BYTES.len());
-        self.writer.write_all(&padded_header)?;
-        
-        // Возвращаемся на текущую позицию для записи индекса
-        self.writer.seek(SeekFrom::Start(self.current_offset))?;
         let index_offset = self.current_offset;
         let index_bytes = serde_json::to_vec(&self.index)?;
         self.writer.write_all(&index_bytes)?;

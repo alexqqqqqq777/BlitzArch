@@ -4,7 +4,6 @@ use tempfile::{NamedTempFile, TempPath};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[cfg(unix)]
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
 // use of raw fd not required in hybrid stream variant
 use std::path::{Path, PathBuf};

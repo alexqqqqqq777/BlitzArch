@@ -11,6 +11,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # ensure full history so we checkout the exact latest commit
+      - name: Show checked-out commit
+        run: git --no-pager log -1 --oneline
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

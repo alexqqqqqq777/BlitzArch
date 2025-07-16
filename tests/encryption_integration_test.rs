@@ -67,7 +67,7 @@ fn test_encrypted_archive_creation_and_extraction() {
     create_test_data(source_dir.path(), 5, 1024).unwrap();
 
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test_encrypted.mfa");
+    let archive_path = archive_dir.path().join("test_encrypted.blz");
     let password = "a_very_secret_password";
 
     // 2. Create encrypted archive
@@ -112,7 +112,7 @@ fn test_archive_with_empty_file() {
     File::create(&empty_file_path).unwrap();
 
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test_empty_file.mfa");
+    let archive_path = archive_dir.path().join("test_empty_file.blz");
 
     // 2. Create archive (no encryption)
     let options = compress::CompressOptions {
@@ -151,7 +151,7 @@ fn test_archive_with_empty_directory() {
     fs::create_dir(&empty_dir_path).unwrap();
 
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test_empty_dir.mfa");
+    let archive_path = archive_dir.path().join("test_empty_dir.blz");
 
     // 2. Create archive
     let options = compress::CompressOptions {
@@ -187,7 +187,7 @@ fn test_extraction_fails_with_wrong_password() {
     let source_dir = tempdir().unwrap();
     create_test_data(source_dir.path(), 2, 128).unwrap();
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test_wrong_pass.mfa");
+    let archive_path = archive_dir.path().join("test_wrong_pass.blz");
     let correct_password = "correct_password";
     let wrong_password = "wrong_password";
 
@@ -234,7 +234,7 @@ fn test_extraction_fails_without_password_for_encrypted_archive() {
     let source_dir = tempdir().unwrap();
     create_test_data(source_dir.path(), 2, 128).unwrap();
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test_no_pass.mfa");
+    let archive_path = archive_dir.path().join("test_no_pass.blz");
     let password = "a_password";
 
     // 2. Create archive

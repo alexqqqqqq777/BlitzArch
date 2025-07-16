@@ -58,7 +58,7 @@ fn katana_detection_false_for_regular_archive() {
     let src = tempdir().unwrap();
     create_test_files(src.path(), 2, 1024);
     let arch_dir = tempdir().unwrap();
-    let arch_path = arch_dir.path().join("reg.mfa");
+    let arch_path = arch_dir.path().join("reg.blz");
     let opts = blitzarch::compress::CompressOptions {
         level: 1,
         threads: 1,

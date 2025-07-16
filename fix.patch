@@ -1,0 +1,13 @@
+--- a/src/archive/mod.rs
++++ b/src/archive/mod.rs
+@@ -223,7 +223,9 @@
+             (data, None)
+         };
+ 
+-        self.writer.write_all(&data_to_write)?;
++        // Позиционируемся на текущее смещение, чтобы не затереть заголовок
++        self.writer.seek(SeekFrom::Start(self.current_offset))?;
++        self.writer.write_all(&data_to_write)?;
+         let compressed_size = data_to_write.len() as u64;
+ 
+         self.index.bundles.push(BundleInfo {

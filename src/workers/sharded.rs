@@ -12,7 +12,7 @@
 //! 2. Each bundle is sent to a worker thread for compression into a temporary file.
 //! 3. The main thread receives these temporary files and streams them into the final archive.
 
-use crate::fsx::File;
+use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;

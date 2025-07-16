@@ -27,11 +27,8 @@
 //! produced by `zstd::Encoder::new_mt(level 0, nb_threads)`.
 
 use std::error::Error;
-use crate::fsx as fs;
-use fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-#[cfg(unix)]
-#[cfg(unix)]
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
 use std::path::{Path, PathBuf};

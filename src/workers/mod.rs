@@ -9,7 +9,7 @@ use crate::compress::{collect_file_metadata, group_files_into_bundles};
 use crate::ArchiverError;
 
 use crossbeam_channel::bounded;
-use crate::fsx::File;
+use std::fs::File;
 use std::sync::Arc;
 use std::thread;
 

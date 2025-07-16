@@ -15,8 +15,7 @@ use crate::ArchiverError;
 
 use jwalk;
 use std::io::Write;
-use crate::fsx as fs;
-use fs::{File};
+use std::fs::File;
 use std::io::{self, Read, Seek};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode() helper
@@ -70,7 +69,7 @@ pub(crate) fn is_dense_ext(ext: &str) -> bool {
 /// Quick magic-bytes detection for already-compressed formats.
 /// This is *not* a complete parser; we just peek first few bytes to flag dense data.
 fn is_dense_magic(path: &std::path::Path) -> bool {
-    use crate::fsx::File;
+    use std::fs::File;
     use std::io::Read;
     let mut buf = [0u8; 8];
     let Ok(mut f) = File::open(path) else { return false };

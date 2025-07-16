@@ -11,12 +11,11 @@ mod block_pipeline;
 mod writer_pool;
 
 use std::collections::{HashMap, HashSet};
-use crate::fsx as fs;
-use fs::File;
+use std::fs::{self, File};
 #[cfg(unix)]
-use std::os::unix::fs::{PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
-use fs::Permissions;
+use std::fs::Permissions;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::error::Error;

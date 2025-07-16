@@ -25,7 +25,7 @@ fn test_cli_create_list_extract_cycle() -> Result<(), Box<dyn std::error::Error>
     nested_file.write_all(&[0, 1, 2, 3, 4, 5])?;
 
     let archive_dir = tempdir()?;
-    let archive_path = archive_dir.path().join("test_archive.mfa");
+    let archive_path = archive_dir.path().join("test_archive.blz");
 
     // 2. Create archive
     let mut cmd = Command::cargo_bin("blitzarch")?;

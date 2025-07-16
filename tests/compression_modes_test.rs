@@ -48,7 +48,7 @@ fn roundtrip(options: compress::CompressOptions, password: Option<&str>) {
     create_test_data(src_dir.path(), 5, 2048).unwrap();
 
     let archive_dir = tempdir().unwrap();
-    let archive_path = archive_dir.path().join("test.mfa");
+    let archive_path = archive_dir.path().join("test.blz");
 
     compress::run(
         &[src_dir.path().to_path_buf()],
@@ -130,7 +130,7 @@ fn random_access_extract() {
     create_test_data(src_dir.path(), 10, 1024).unwrap();
 
     let arch = tempdir().unwrap();
-    let arch_path = arch.path().join("ra.mfa");
+    let arch_path = arch.path().join("ra.blz");
     let opts = compress::CompressOptions {
         level: 3,
         threads: 2,
@@ -179,7 +179,7 @@ fn zstd_wrong_password_fails() {
     let src_dir = tempdir().unwrap();
     create_test_data(src_dir.path(), 3, 1024).unwrap();
     let arch_dir = tempdir().unwrap();
-    let arch_path = arch_dir.path().join("enc.mfa");
+    let arch_path = arch_dir.path().join("enc.blz");
     compress::run(
         &[src_dir.path().to_path_buf()],
         &arch_path,

@@ -18,12 +18,11 @@
 //!
 //! This staged approach keeps the code compiling and allows incremental benchmarking.
 
-use crate::fsx as fs;
-use fs::File;
+use std::fs::{self, File};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
-use fs::Permissions;
+use std::fs::Permissions;
 use crate::extract::block_pipeline;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use crate::extract::writer_pool;
