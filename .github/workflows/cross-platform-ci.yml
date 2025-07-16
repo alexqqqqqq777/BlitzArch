@@ -1,0 +1,52 @@
+name: BlitzArch Cross-Platform CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-key: "${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}"
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Package artifact (Linux/macOS)
+        run: |
+          set -e
+          BIN_PATH="target/release/blitzarch"
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            ART_OUT="blitzarch-${VERSION}-linux-x86_64.tar.gz"
+            tar -czf "$ART_OUT" -C target/release blitzarch
+          else
+            ART_OUT="blitzarch-${VERSION}-macos-universal.zip"
+            # create universal binary only if both archs; otherwise zip
+            zip -j "$ART_OUT" "$BIN_PATH"
+          fi
+          echo "ARTIFACT=$ART_OUT" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: ${{ env.ARTIFACT }}
+
