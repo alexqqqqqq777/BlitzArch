@@ -74,6 +74,7 @@ fn extract_from_decoder(
 
         #[cfg(unix)]
         {
+            #[cfg(unix)]
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = file_entry.permissions {
                 crate::fsx::set_unix_permissions(&target_path, mode)?;

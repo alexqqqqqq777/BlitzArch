@@ -18,6 +18,24 @@ use std::path::Path;
 // Re-export the whole standard fs module so callers can write `fs::File` etc.
 pub use std::fs::*;
 
+/// Return POSIX mode bits if available (Unix), otherwise 0.
+#[inline]
+pub fn unix_mode(meta: &std::fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt; meta.permissions().mode() }
+    #[cfg(not(unix))]
+    { 0 }
+}
+
+/// Return Some(mode) on Unix, None on non-Unix.
+#[inline]
+pub fn maybe_unix_mode(meta: &std::fs::Metadata) -> Option<u32> {
+    #[cfg(unix)]
+    { Some(unix_mode(meta)) }
+    #[cfg(not(unix))]
+    { None }
+}
+
 // --------------------------------------------------------------------------
 // Unix-specific helper
 // --------------------------------------------------------------------------

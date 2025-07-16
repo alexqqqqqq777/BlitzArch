@@ -32,7 +32,8 @@ use fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt; // mode()
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -270,7 +271,7 @@ use std::os::unix::io::AsRawFd;
                         path: normalized_path,
                         size: meta.len(),
                         offset: uncompressed_written, // record current offset
-                        permissions: Some(meta.permissions().mode()),
+                        permissions: crate::fsx::maybe_unix_mode(&meta),
                     });
                     uncompressed_written += meta.len();
                     loop {

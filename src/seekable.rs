@@ -19,7 +19,8 @@ use walkdir::WalkDir;
 use zstd_seekable::{SeekableCStream, Seekable};
 use zstd_sys::ZSTD_FRAMEHEADERSIZE_MAX;
 use serde::{Serialize, Deserialize};
-use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt; // mode()
 use memmap2::Mmap;
 use zstd::stream::read::Decoder as ZstdDecoder;
 

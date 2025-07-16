@@ -19,7 +19,7 @@ use crate::fsx as fs;
 use fs::{File};
 use std::io::{self, Read, Seek};
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::PermissionsExt; // mode() helper
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 use tempfile::NamedTempFile;
@@ -315,7 +315,12 @@ pub fn collect_file_metadata(paths: &[PathBuf]) -> Result<Vec<FileMetadata>, Arc
                 })?
                 .to_path_buf();
 
-            let permissions = metadata.permissions().mode();
+            let permissions: u32 = {
+                #[cfg(unix)]
+                { metadata.permissions().mode() }
+                #[cfg(not(unix))]
+                { 0 }
+            };
             let modified_time = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs();
 
             let ext_dense = relative_path

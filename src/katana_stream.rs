@@ -4,7 +4,8 @@ use tempfile::{NamedTempFile, TempPath};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt; // for mode()
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt; // mode()
 // use of raw fd not required in hybrid stream variant
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -164,7 +165,7 @@ pub fn create_katana_archive(
                         offset: uncompressed, // record current offset before writing
                         permissions: {
                             #[cfg(unix)]
-                            { Some(meta.permissions().mode()) }
+                            { crate::fsx::maybe_unix_mode(&meta) }
                             #[cfg(not(unix))]
                             { None }
                         },
