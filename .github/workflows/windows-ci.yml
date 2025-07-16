@@ -29,6 +29,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build (debug)
         run: cargo build --verbose
+      - name: Install Visual C++ Redistributable
+        run: |
+          choco install vcredist140 -y
+          choco install vcredist2015 -y
       - name: Run tests
         run: cargo test --all --verbose
       - name: Build (release)
