@@ -1,0 +1,21 @@
+BlitzArch Commercial License v1.0 (2025)
+
+Copyright (c) 2025 Oleksandr Kraiz
+All rights reserved.
+
+Permission is hereby granted, to any commercial entity ("Licensee"), to use,
+copy, and distribute binary forms of the BlitzArch software ("Software") in
+proprietary or closed-source products, subject to the following conditions:
+
+1. A valid commercial license has been purchased from the copyright holder.
+2. The Software may be used only by the number of developers and/or on the
+   number of devices covered by the purchased license tier.
+3. Redistribution of the Software in source form is prohibited.
+4. Licensee may not remove or obscure any copyright notices within the
+   Software or accompanying materials.
+5. THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. IN NO EVENT
+   SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+   THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For pricing and purchasing please contact: aleksandr.krayz@gmail.com | +380990058509

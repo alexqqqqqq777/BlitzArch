@@ -1,0 +1,25 @@
+Dataset,Profile,Archiver,Files,Source Size,Archive Size,Ratio,Create Wall,Create CPU,Create TP MBs,Create Peak Mem,Extract Wall,Extract CPU,Extract TP MBs,Extract Peak Mem
+video,L3_katana_fast16,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.18,0.00,5.59,17.19MiB,0.00,0.00,0.00,5.52MiB
+video,L3_katana_fast16_adapt,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,17.11MiB,0.00,0.00,0.00,5.45MiB
+video,L3_photo,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,10.19MiB,0.00,0.00,0.00,5.48MiB
+video,L3_katana_lowmem,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,10.20MiB,0.00,0.00,0.00,5.47MiB
+video,L3_katana_dedup4,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,17.06MiB,0.00,0.00,0.00,5.55MiB
+video,L3_text64,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,6.12MiB,0.00,0.00,0.00,3.89MiB
+video,L3_lzma7,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,6.09MiB,0.00,0.00,0.00,3.91MiB
+video,L7_base,BlitzArch,1,1.01MiB,1.01MiB,1.00,0.00,0.00,0.00,6.11MiB,0.00,0.00,0.00,3.89MiB
+images,L3_katana_fast16,BlitzArch,60010,130.65MiB,128.63MiB,1.02,2.08,2.46,62.81,228.89MiB,2.54,11.98,51.44,46.89MiB
+images,L3_katana_fast16_adapt,BlitzArch,60010,130.65MiB,128.63MiB,1.02,1.24,2.40,105.36,222.83MiB,2.76,12.41,47.34,44.81MiB
+images,L3_photo,BlitzArch,60010,130.65MiB,128.63MiB,1.02,1.20,2.48,108.87,216.73MiB,2.67,12.33,48.93,47.02MiB
+images,L3_katana_lowmem,BlitzArch,60010,130.65MiB,128.64MiB,1.02,5.03,1.64,25.97,75.80MiB,5.49,5.08,23.80,28.78MiB
+images,L3_katana_dedup4,BlitzArch,60010,130.65MiB,128.63MiB,1.02,1.20,2.38,108.87,218.66MiB,2.56,12.04,51.03,46.70MiB
+images,L3_text64,BlitzArch,60010,130.65MiB,141.48MiB,0.92,2.76,4.24,47.34,83.62MiB,6.93,16.30,18.85,18.28MiB
+images,L3_lzma7,BlitzArch,60010,130.65MiB,141.48MiB,0.92,2.58,4.23,50.64,82.31MiB,7.16,16.78,18.25,18.22MiB
+images,L7_base,BlitzArch,60010,130.65MiB,141.48MiB,0.92,2.77,4.53,47.17,78.47MiB,6.83,15.94,19.13,18.27MiB
+all,L3_katana_fast16,BlitzArch,10,239.33MiB,69.82MiB,3.43,0.15,0.55,1595.53,221.50MiB,0.15,0.15,1595.53,11.78MiB
+all,L3_katana_fast16_adapt,BlitzArch,10,239.33MiB,69.82MiB,3.43,0.13,0.54,1841.00,219.64MiB,0.15,0.14,1595.53,11.83MiB
+all,L3_photo,BlitzArch,10,239.33MiB,69.82MiB,3.43,0.13,0.51,1841.00,221.44MiB,0.15,0.14,1595.53,11.78MiB
+all,L3_katana_lowmem,BlitzArch,10,239.33MiB,69.82MiB,3.43,0.30,0.34,797.77,79.64MiB,0.14,0.14,1709.50,6.77MiB
+all,L3_katana_dedup4,BlitzArch,10,239.33MiB,69.82MiB,3.43,0.12,0.53,1994.41,221.58MiB,0.13,0.14,1841.00,11.77MiB
+all,L3_text64,BlitzArch,10,239.33MiB,69.83MiB,3.43,0.23,0.34,1040.56,101.39MiB,0.20,0.24,1196.65,11.88MiB
+all,L3_lzma7,BlitzArch,10,239.33MiB,64.90MiB,3.69,16.70,61.65,14.33,1242.44MiB,1.07,1.19,223.67,27.06MiB
+all,L7_base,BlitzArch,10,239.33MiB,68.48MiB,3.50,0.77,0.92,310.82,114.89MiB,0.20,0.25,1196.65,11.89MiB

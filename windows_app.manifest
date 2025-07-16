@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Windows application manifest for BlitzArch.
+    Enables long path (> 260) support on Windows 10+ and sets appropriate DPI & execution level.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="BlitzArch" type="win32"/>
+
+  <!-- Enable Windows 10 long path awareness -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <longPathAware>true</longPathAware>
+    </windowsSettings>
+  </application>
+
+  <!-- High DPI aware -->
+  <asmv3:application xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+    <asmv3:windowsSettings>
+      <dpiAware>true</dpiAware>
+      <dpiAwareness>PerMonitorV2</dpiAwareness>
+    </asmv3:windowsSettings>
+  </asmv3:application>
+
+  <!-- Require admin only when needed (none) -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

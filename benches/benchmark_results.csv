@@ -1,0 +1,5 @@
+Dataset,Profile,Archiver,Source File Count,Source Total Size (bytes),Archive Size (bytes),Compression Ratio,Create Wall Time (s),Create CPU Time (s),Create Peak Memory (bytes),Create Throughput (MB/s),Extract Wall Time (s),Extract CPU Time (s),Extract Peak Memory (bytes),Extract Throughput (MB/s)
+GH_ARCHIVE_L19,L3,tar+zstd,126670,453914225,69960989,6.49,57.38,42.67,98222080,7.54,46.99,42.81,6864896,9.21
+GH_ARCHIVE_L19,L3,zip+zstd,126670,453914225,125177827,3.63,27.96457375,0,0,15.48,13.691320666,0,0,31.62
+GH_ARCHIVE_L19,L7,tar+zstd,126670,453914225,63464733,7.15,55.48,42.58,102973440,7.80,46.72,42.550000000000004,6897664,9.27
+GH_ARCHIVE_L19,L7,zip+zstd,126670,453914225,121957512,3.72,52.248714083,0,0,8.29,14.275666833,0,0,30.32

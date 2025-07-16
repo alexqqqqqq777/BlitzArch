@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    WiX Toolset installer definition for BlitzArch.
+    Build with:
+        candle blitzarch.wxs
+        light -ext WixUIExtension blitzarch.wixobj -o BlitzArch.msi
+
+    Notes:
+    • This is a *minimal* template. Adjust upgrade GUIDs, icons, shortcuts, EULA, etc.
+    • Output EXE path assumes cargo build --release.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="BlitzArch"
+           Language="1033"
+           Version="0.1.0"
+           Manufacturer="BlitzArch Project"
+           UpgradeCode="PUT-GUID-HERE-0000-0000-000000000000">
+
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+
+    <MediaTemplate />
+
+    <Feature Id="BlitzArchFeature" Title="BlitzArch" Level="1">
+      <ComponentGroupRef Id="FilesGroup" />
+    </Feature>
+
+    <!-- Add Start Menu shortcut -->
+    <UIRef Id="WixUI_InstallDir" />
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="BlitzArch" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ProgramMenuDir" Name="BlitzArch" />
+      </Directory>
+    </Directory>
+
+    <ComponentGroup Id="FilesGroup" Directory="INSTALLFOLDER">
+      <!-- Main executable -->
+      <Component Id="cmpBlitzArchExe" Guid="*">
+        <File Id="filBlitzArchExe" Source="..\\target\\release\\blitzarch.exe" KeyPath="yes" />
+
+        <!-- Shortcut -->
+        <Shortcut Id="BlitzArchShortcut"
+                  Directory="ProgramMenuDir"
+                  Name="BlitzArch"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="BlitzIcon"
+                  Advertise="no"
+                  Target="[INSTALLFOLDER]blitzarch.exe" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Icon resource -->
+    <Icon Id="BlitzIcon" SourceFile="..\\assets\\blitzarch.ico" />
+
+  </Product>
+</Wix>
