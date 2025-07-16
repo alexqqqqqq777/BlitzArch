@@ -157,6 +157,7 @@ fn katana_windows_path_handling() {
 
 }
 
+#[cfg(unix)]
 #[test]
 fn katana_permissions_preserved() {
     use std::fs;
