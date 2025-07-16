@@ -29,7 +29,13 @@ jobs:
       - name: Build release binary
         env:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
-        run: cargo build --release --locked
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            rustup target add x86_64-apple-darwin
+            cargo build --release --locked --target x86_64-apple-darwin
+          else
+            cargo build --release --locked
+          fi
 
       - name: Package artifact (Linux/macOS)
         run: |
