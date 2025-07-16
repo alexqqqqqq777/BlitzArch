@@ -29,10 +29,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build (debug)
         run: cargo build --verbose
-      - name: Install Visual C++ Redistributable
+      - name: Setup Rust for static linking
         run: |
-          choco install vcredist140 -y
-          choco install vcredist2015 -y
+          # Configure Rust to use the MSVC static CRT
+          echo "[target.x86_64-pc-windows-msvc]" >> $env:USERPROFILE\.cargo\config.toml
+          echo "rustflags = [\"-Ctarget-feature=+crt-static\"]" >> $env:USERPROFILE\.cargo\config.toml
+          cat $env:USERPROFILE\.cargo\config.toml
       - name: Run tests
         run: cargo test --all --verbose
       - name: Build (release)
