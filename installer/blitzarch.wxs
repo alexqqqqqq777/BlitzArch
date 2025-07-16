@@ -24,6 +24,7 @@
     <Feature Id="Complete" Level="1">
       <ComponentGroupRef Id="FilesGroup" />
       <ComponentRef Id="ProgramMenuDir" />
+      <ComponentRef Id="cmpBlitzArchShortcut" />
     </Feature>
 
     <!-- Add Start Menu shortcut -->
@@ -48,9 +49,12 @@
 
     <ComponentGroup Id="FilesGroup" Directory="INSTALLFOLDER">
       <!-- Main executable -->
-      <Component Id="cmpBlitzArchExe" Guid="*">
-        <File Id="filBlitzArchExe" Source="..\\target\\release\\blitzarch.exe" />
-
+      <Component Id="cmpBlitzArchExe" Guid="{B5736F6D-9A23-4E7D-AB1C-22AEC26D1518}">
+        <File Id="filBlitzArchExe" Source="..\\target\\release\\blitzarch.exe" KeyPath="yes" />
+      </Component>
+      
+      <!-- Registry and shortcut -->
+      <Component Id="cmpBlitzArchShortcut" Guid="{8DD1E4FC-CAA4-4F08-B529-C6A302FA68F7}">
         <!-- Registry key for component -->        
         <RegistryValue Root="HKCU" Key="Software\\BlitzArch"
                        Name="installed" Type="integer" Value="1" KeyPath="yes"/>
