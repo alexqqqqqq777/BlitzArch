@@ -52,8 +52,10 @@
       <Component Id="cmpBlitzArchExe" Guid="{B5736F6D-9A23-4E7D-AB1C-22AEC26D1518}">
         <File Id="filBlitzArchExe" Source="..\\target\\release\\blitzarch.exe" KeyPath="yes" />
       </Component>
-      
-      <!-- Registry and shortcut -->
+    </ComponentGroup>
+    
+    <!-- Registry and shortcut component -->
+    <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="cmpBlitzArchShortcut" Guid="{8DD1E4FC-CAA4-4F08-B529-C6A302FA68F7}">
         <!-- Registry key for component -->        
         <RegistryValue Root="HKCU" Key="Software\\BlitzArch"
@@ -68,7 +70,7 @@
                   Advertise="no"
                   Target="[INSTALLFOLDER]blitzarch.exe" />
       </Component>
-    </ComponentGroup>
+    </DirectoryRef>
 
     <!-- Icon resource -->
     <Icon Id="BlitzIcon" SourceFile="..\\assets\\blitzarch.ico" />
