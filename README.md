@@ -21,6 +21,20 @@
 - **Cross-Platform Compatible**: Robust path handling that works consistently across Windows, macOS, and Linux with secure sanitization of absolute paths.
 - **Strong Encryption**: AES-256-GCM authenticated encryption to keep your data secure.
 
+## Download (pre-built binaries)
+
+Grab the latest release from the **[GitHub Releases page](https://github.com/alexqqqqqq777/BlitzArch/releases)**:
+
+| OS | File | Quick install |
+|----|------|---------------|
+| Windows | `BlitzArch-<version>.msi` | download & double-click |
+| macOS (x86_64) | `blitzarch-<version>-macos-x86_64.zip` | `curl -L https://github.com/alexqqqqqq777/BlitzArch/releases/latest/download/blitzarch-$(uname -m).zip -o blitzarch.zip && unzip blitzarch.zip && chmod +x blitzarch` |
+| Linux (x86_64, glibc 2.31+) | `blitzarch-<version>-linux-x86_64.tar.gz` | `curl -L https://github.com/alexqqqqqq777/BlitzArch/releases/latest/download/blitzarch-linux-x86_64.tar.gz | tar -xz && chmod +x blitzarch` |
+
+Once downloaded, run `blitzarch --help` to see the commands.
+
+---
+
 ## Installation
 
 ### From Crates.io (Recommended)
