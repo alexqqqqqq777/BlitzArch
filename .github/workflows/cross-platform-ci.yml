@@ -40,14 +40,14 @@ jobs:
       - name: Package artifact (Linux/macOS)
         run: |
           set -e
-          BIN_PATH="target/release/blitzarch"
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
           if [[ "${{ runner.os }}" == "Linux" ]]; then
+            BIN_PATH="target/release/blitzarch"
             ART_OUT="blitzarch-${VERSION}-linux-x86_64.tar.gz"
             tar -czf "$ART_OUT" -C target/release blitzarch
           else
-            ART_OUT="blitzarch-${VERSION}-macos-universal.zip"
-            # create universal binary only if both archs; otherwise zip
+            BIN_PATH="target/x86_64-apple-darwin/release/blitzarch"
+            ART_OUT="blitzarch-${VERSION}-macos-x86_64.zip"
             zip -j "$ART_OUT" "$BIN_PATH"
           fi
           echo "ARTIFACT=$ART_OUT" >> $GITHUB_ENV
