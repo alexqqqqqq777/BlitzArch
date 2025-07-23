@@ -1,0 +1,697 @@
+use std::path::Path;
+use std::process::Command;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use sysinfo::{System, Disks};
+use tauri::{AppHandle, Emitter};
+
+// Import BlitzArch engine functions and types
+use blitzarch::katana::{create_katana_archive_with_progress, extract_katana_archive_with_progress};
+use blitzarch::progress::ProgressState;
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ArchiveResult {
+    success: bool,
+    output: Option<String>,
+    error: Option<String>,
+    archive_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SystemMetrics {
+    cpu_usage: f32,
+    memory_used: u64,
+    memory_total: u64,
+    memory_percentage: f32,
+    disk_usage: f32,
+    disk_read_bytes: u64,
+    disk_written_bytes: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ProgressEvent {
+    operation: String,           // "create" or "extract"
+    progress: f32,              // 0.0 to 100.0
+    speed: f32,                // MB/s
+    message: String,           // Status message
+    completed: bool,           // True when operation is finished
+    error: Option<String>,     // Error message if any
+    
+    // Rich metrics from ProgressState
+    processed_files: u64,      // Number of files processed
+    total_files: u64,          // Total number of files
+    processed_bytes: u64,      // Bytes processed
+    total_bytes: u64,          // Total bytes
+    completed_shards: u32,     // Completed shards
+    total_shards: u32,         // Total shards
+    elapsed_time: f32,         // Elapsed time in seconds
+    eta_seconds: f32,          // Estimated time remaining
+    compression_ratio: Option<f32>, // Compression ratio (for completed operations)
+}
+
+// Async version of create_archive with progress events
+#[tauri::command]
+pub async fn create_archive_async(
+    app: AppHandle,
+    inputs: Vec<String>,
+    output_path: String,
+    compression_level: u32,
+    bundle_size: Option<u64>,
+    password: Option<String>,
+    threads: Option<usize>,
+) -> Result<ArchiveResult, String> {
+    let app_clone = app.clone();
+    let inputs_clone = inputs.clone();
+    let output_path_clone = output_path.clone();
+    
+    // Use engine directly instead of CLI spawning for real progress
+    tauri::async_runtime::spawn_blocking(move || {
+        create_archive_with_real_progress(
+            app_clone,
+            inputs_clone,
+            output_path_clone,
+            compression_level,
+            bundle_size,
+            password,
+            threads,
+        )
+    }).await.map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+fn create_archive_with_real_progress(
+    app: AppHandle,
+    inputs: Vec<String>,
+    output_path: String,
+    compression_level: u32,
+    bundle_size: Option<u64>,
+    password: Option<String>,
+    threads: Option<usize>,
+) -> Result<ArchiveResult, String> {
+    println!("🚀 Creating archive async: {}", output_path);
+    
+    let start_time = std::time::Instant::now();
+    
+    // Initial progress
+    let initial_progress = ProgressEvent {
+        operation: "create".to_string(),
+        progress: 0.0,
+        speed: 0.0,
+        message: "Starting archive creation...".to_string(),
+        completed: false,
+        error: None,
+        
+        // Initialize metrics
+        processed_files: 0,
+        total_files: 0,
+        processed_bytes: 0,
+        total_bytes: 0,
+        completed_shards: 0,
+        total_shards: 0,
+        elapsed_time: 0.0,
+        eta_seconds: 0.0,
+        compression_ratio: None,
+    };
+    app.emit("archive-progress", &initial_progress).ok();
+    
+    // Convert string paths to PathBuf
+    let input_paths: Vec<std::path::PathBuf> = inputs.iter().map(|s| std::path::PathBuf::from(s)).collect();
+    let output_pathbuf = std::path::PathBuf::from(&output_path);
+    
+    // Create progress callback
+    let app_for_progress = app.clone();
+    let progress_callback = move |state: ProgressState| {
+        let progress_event = ProgressEvent {
+            operation: "create".to_string(),
+            progress: state.progress_percent,
+            speed: state.speed_mbps,
+            message: format!("Processing files: {}/{} ({:.1} MB/s)", 
+                state.processed_files, 
+                state.total_files, 
+                state.speed_mbps),
+            completed: false,
+            error: None,
+            
+            // Rich metrics from ProgressState
+            processed_files: state.processed_files,
+            total_files: state.total_files,
+            processed_bytes: state.processed_bytes,
+            total_bytes: state.total_bytes,
+            completed_shards: state.completed_shards,
+            total_shards: state.total_shards,
+            elapsed_time: state.elapsed_time.as_secs_f32(),
+            eta_seconds: state.estimated_time_remaining().as_secs_f32(),
+            compression_ratio: None, // Will be set in final event
+        };
+        app_for_progress.emit("archive-progress", &progress_event).ok();
+    };
+    
+    // Call engine directly with progress callback
+    let result = create_katana_archive_with_progress(
+        &input_paths,
+        &output_pathbuf,
+        threads.unwrap_or(0),
+        password,
+        Some(progress_callback),
+    );
+    
+    // Handle result and emit final progress
+    match result {
+        Ok(()) => {
+            let elapsed = start_time.elapsed();
+            
+            // Calculate final metrics
+            let archive_size = std::fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
+            let total_input_size: u64 = input_paths.iter()
+                .filter_map(|p| std::fs::metadata(p).ok())
+                .map(|m| m.len())
+                .sum();
+            
+            let compression_ratio = if archive_size > 0 {
+                Some(total_input_size as f32 / archive_size as f32)
+            } else {
+                None
+            };
+            
+            let final_progress = ProgressEvent {
+                operation: "create".to_string(),
+                progress: 100.0,
+                speed: if elapsed.as_secs_f32() > 0.0 {
+                    (total_input_size as f32 / (1024.0 * 1024.0)) / elapsed.as_secs_f32()
+                } else { 0.0 },
+                message: format!("Archive created successfully in {:.1}s", elapsed.as_secs_f32()),
+                completed: true,
+                error: None,
+                
+                // Final metrics
+                processed_files: input_paths.len() as u64, // Approximation
+                total_files: input_paths.len() as u64,
+                processed_bytes: total_input_size,
+                total_bytes: total_input_size,
+                completed_shards: 1, // Approximation
+                total_shards: 1,
+                elapsed_time: elapsed.as_secs_f32(),
+                eta_seconds: 0.0,
+                compression_ratio,
+            };
+            app.emit("archive-progress", &final_progress).ok();
+            
+            Ok(ArchiveResult {
+                success: true,
+                output: Some(format!("Archive created successfully: {}", output_path)),
+                error: None,
+                archive_path: Some(output_path),
+            })
+        }
+        Err(e) => {
+            let error_msg = format!("Archive creation failed: {}", e);
+            let final_progress = ProgressEvent {
+                operation: "create".to_string(),
+                progress: 0.0,
+                speed: 0.0,
+                message: "Archive creation failed!".to_string(),
+                completed: true,
+                error: Some(error_msg.clone()),
+                
+                // Error state metrics
+                processed_files: 0,
+                total_files: 0,
+                processed_bytes: 0,
+                total_bytes: 0,
+                completed_shards: 0,
+                total_shards: 0,
+                elapsed_time: start_time.elapsed().as_secs_f32(),
+                eta_seconds: 0.0,
+                compression_ratio: None,
+            };
+            app.emit("archive-progress", &final_progress).ok();
+            
+            Ok(ArchiveResult {
+                success: false,
+                output: None,
+                error: Some(error_msg),
+                archive_path: None,
+            })
+        }
+    }
+}
+
+// Tauri command to create archive (legacy sync version)
+#[tauri::command]
+fn create_archive(
+    files: Vec<String>,
+    archive_name: String,
+    output_dir: String,
+    compression_level: Option<u8>,
+    password: Option<String>,
+    bundle_size: Option<u32>,
+) -> Result<ArchiveResult, String> {
+    println!("🚀 Creating archive: {} in {}", archive_name, output_dir);
+    println!("📋 Files: {:?}", files);
+    
+    // Build BlitzArch command
+    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    cmd.arg("create");
+    
+    // Output path
+    let archive_path = format!("{}/{}.blz", output_dir, archive_name);
+    cmd.args(["--output", &archive_path]);
+    
+    // Bundle size
+    let bundle_size = bundle_size.unwrap_or(32);
+    cmd.args(["--bundle-size", &bundle_size.to_string()]);
+    
+    // Compression level
+    if let Some(level) = compression_level {
+        if level != 3 {
+            cmd.args(["--level", &level.to_string()]);
+        }
+    }
+    
+    // Password
+    if let Some(pwd) = password {
+        cmd.args(["--password", &pwd]);
+    }
+    
+    // Add input files
+    for file in &files {
+        cmd.arg(file);
+    }
+    
+    println!("🔧 Command: {:?}", cmd);
+    
+    // Execute command
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            if output.status.success() {
+                println!("✅ Archive created successfully");
+                Ok(ArchiveResult {
+                    success: true,
+                    output: Some(stdout.to_string()),
+                    error: None,
+                    archive_path: Some(archive_path),
+                })
+            } else {
+                println!("❌ Archive creation failed: {}", stderr);
+                Ok(ArchiveResult {
+                    success: false,
+                    output: None,
+                    error: Some(stderr.to_string()),
+                    archive_path: None,
+                })
+            }
+        }
+        Err(e) => {
+            println!("💥 Command execution failed: {}", e);
+            Err(format!("Failed to execute command: {}", e))
+        }
+    }
+}
+
+// Tauri command to get parent directory of a file
+#[tauri::command]
+fn get_parent_directory(file_path: String) -> Result<String, String> {
+    let path = Path::new(&file_path);
+    if let Some(parent) = path.parent() {
+        Ok(parent.to_string_lossy().to_string())
+    } else {
+        Err("Could not get parent directory".to_string())
+    }
+}
+
+// Async version of extract_archive with progress events
+#[tauri::command]
+pub async fn extract_archive_async(
+    app: AppHandle,
+    archive_path: String,
+    output_dir: String,
+    password: Option<String>,
+    strip_components: Option<u32>,
+) -> Result<ArchiveResult, String> {
+    let app_clone = app.clone();
+    let archive_path_clone = archive_path.clone();
+    let output_dir_clone = output_dir.clone();
+    
+    // Use engine directly instead of CLI spawning for real progress
+    tauri::async_runtime::spawn_blocking(move || {
+        extract_archive_with_real_progress(
+            app_clone,
+            archive_path_clone,
+            output_dir_clone,
+            password,
+            strip_components,
+        )
+    }).await.map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+fn extract_archive_with_real_progress(
+    app: AppHandle,
+    archive_path: String,
+    output_dir: String,
+    password: Option<String>,
+    strip_components: Option<u32>,
+) -> Result<ArchiveResult, String> {
+    println!("🔄 Extracting archive async: {} to {}", archive_path, output_dir);
+    
+    let start_time = std::time::Instant::now();
+    
+    // Initial progress
+    let initial_progress = ProgressEvent {
+        operation: "extract".to_string(),
+        progress: 0.0,
+        speed: 0.0,
+        message: "Starting archive extraction...".to_string(),
+        completed: false,
+        error: None,
+        
+        // Initialize rich metrics
+        processed_files: 0,
+        total_files: 0,
+        processed_bytes: 0,
+        total_bytes: 0,
+        completed_shards: 0,
+        total_shards: 0,
+        elapsed_time: 0.0,
+        eta_seconds: 0.0,
+        compression_ratio: None,
+    };
+    app.emit("archive-progress", &initial_progress).ok();
+    
+    // Convert string paths to PathBuf
+    let archive_pathbuf = std::path::PathBuf::from(&archive_path);
+    let output_pathbuf = std::path::PathBuf::from(&output_dir);
+    
+    // Create progress callback
+    let app_for_progress = app.clone();
+    let progress_callback = move |state: ProgressState| {
+        let progress_event = ProgressEvent {
+            operation: "extract".to_string(),
+            progress: state.progress_percent,
+            speed: state.speed_mbps,
+            message: format!("Extracting files: {}/{} ({:.1} MB/s)", 
+                state.processed_files, 
+                state.total_files, 
+                state.speed_mbps),
+            completed: false,
+            error: None,
+            
+            // Rich metrics from ProgressState
+            processed_files: state.processed_files,
+            total_files: state.total_files,
+            processed_bytes: state.processed_bytes,
+            total_bytes: state.total_bytes,
+            completed_shards: state.completed_shards,
+            total_shards: state.total_shards,
+            elapsed_time: state.elapsed_time.as_secs_f32(),
+            eta_seconds: state.estimated_time_remaining().as_secs_f32(),
+            compression_ratio: None, // Will be set in final event
+        };
+        app_for_progress.emit("archive-progress", &progress_event).ok();
+    };
+    
+    // Call engine directly with progress callback
+    let result = extract_katana_archive_with_progress(
+        &archive_pathbuf,
+        &output_pathbuf,
+        &[], // Extract all files
+        password,
+        strip_components,
+        Some(progress_callback),
+    );
+    
+    // Handle result and emit final progress
+    match result {
+        Ok(()) => {
+            let elapsed = start_time.elapsed();
+            let final_progress = ProgressEvent {
+                operation: "extract".to_string(),
+                progress: 100.0,
+                speed: 0.0,
+                message: format!("Extraction completed successfully in {:.1}s", elapsed.as_secs_f32()),
+                completed: true,
+                error: None,
+                
+                // Final metrics
+                processed_files: 1, // Approximation
+                total_files: 1,
+                processed_bytes: 0,
+                total_bytes: 0,
+                completed_shards: 1,
+                total_shards: 1,
+                elapsed_time: elapsed.as_secs_f32(),
+                eta_seconds: 0.0,
+                compression_ratio: None,
+            };
+            app.emit("archive-progress", &final_progress).ok();
+            
+            Ok(ArchiveResult {
+                success: true,
+                output: Some(format!("Archive extracted successfully: {}", output_dir)),
+                error: None,
+                archive_path: Some(archive_path),
+            })
+        }
+        Err(e) => {
+            let error_msg = format!("Archive extraction failed: {}", e);
+            let final_progress = ProgressEvent {
+                operation: "extract".to_string(),
+                progress: 0.0,
+                speed: 0.0,
+                message: "Archive extraction failed!".to_string(),
+                completed: true,
+                error: Some(error_msg.clone()),
+                
+                // Error state metrics
+                processed_files: 0,
+                total_files: 0,
+                processed_bytes: 0,
+                total_bytes: 0,
+                completed_shards: 0,
+                total_shards: 0,
+                elapsed_time: start_time.elapsed().as_secs_f32(),
+                eta_seconds: 0.0,
+                compression_ratio: None,
+            };
+            app.emit("archive-progress", &final_progress).ok();
+            
+            Ok(ArchiveResult {
+                success: false,
+                output: None,
+                error: Some(error_msg),
+                archive_path: None,
+            })
+        }
+    }
+}
+
+// Tauri command to extract archive (legacy sync version)
+#[tauri::command]
+fn extract_archive(
+    archive_path: String,
+    output_dir: String,
+    password: Option<String>,
+    strip_components: Option<u32>,
+) -> Result<ArchiveResult, String> {
+    println!("🔄 Extracting archive: {} to {}", archive_path, output_dir);
+    
+    // Build BlitzArch extract command
+    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    cmd.arg("extract");
+    
+    // Input archive
+    cmd.arg(&archive_path);
+    
+    // Output directory
+    cmd.args(["--output", &output_dir]);
+    
+    // Strip components if specified
+    if let Some(n) = strip_components {
+        cmd.args(["--strip-components", &n.to_string()]);
+    }
+    
+    // Password if provided
+    if let Some(pwd) = password {
+        cmd.args(["--password", &pwd]);
+    }
+    
+    println!("🔧 Extract command: {:?}", cmd);
+    
+    // Execute command
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            if output.status.success() {
+                println!("✅ Archive extracted successfully");
+                Ok(ArchiveResult {
+                    success: true,
+                    output: Some(stdout.to_string()),
+                    error: None,
+                    archive_path: None,
+                })
+            } else {
+                println!("❌ Archive extraction failed: {}", stderr);
+                Ok(ArchiveResult {
+                    success: false,
+                    output: None,
+                    error: Some(stderr.to_string()),
+                    archive_path: None,
+                })
+            }
+        }
+        Err(e) => {
+            println!("💥 Extract command execution failed: {}", e);
+            Err(format!("Failed to execute extract command: {}", e))
+        }
+    }
+}
+
+// Tauri command to list archive contents
+#[tauri::command]
+fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
+    println!("📋 Listing archive contents: {}", archive_path);
+    
+    // Build BlitzArch list command
+    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    cmd.arg("list");
+    cmd.arg(&archive_path);
+    
+    println!("🔧 List command: {:?}", cmd);
+    
+    // Execute command
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            if output.status.success() {
+                println!("✅ Archive listed successfully");
+                Ok(ArchiveResult {
+                    success: true,
+                    output: Some(stdout.to_string()),
+                    error: None,
+                    archive_path: None,
+                })
+            } else {
+                println!("❌ Archive listing failed: {}", stderr);
+                Ok(ArchiveResult {
+                    success: false,
+                    output: None,
+                    error: Some(stderr.to_string()),
+                    archive_path: None,
+                })
+            }
+        }
+        Err(e) => {
+            println!("💥 List command execution failed: {}", e);
+            Err(format!("Failed to execute list command: {}", e))
+        }
+    }
+}
+
+// Tauri command to delete file
+#[tauri::command]
+fn delete_file(file_path: String) -> Result<ArchiveResult, String> {
+    println!("🗑️ Deleting file: {}", file_path);
+    
+    match fs::remove_file(&file_path) {
+        Ok(_) => {
+            println!("✅ File deleted successfully");
+            Ok(ArchiveResult {
+                success: true,
+                output: Some(format!("File deleted: {}", file_path)),
+                error: None,
+                archive_path: None,
+            })
+        }
+        Err(e) => {
+            println!("❌ File deletion failed: {}", e);
+            Ok(ArchiveResult {
+                success: false,
+                output: None,
+                error: Some(e.to_string()),
+                archive_path: None,
+            })
+        }
+    }
+}
+
+// Tauri command to get system metrics
+#[tauri::command]
+fn get_system_metrics() -> Result<SystemMetrics, String> {
+    let mut sys = System::new();
+    sys.refresh_all();
+    
+    // Get CPU usage (average across all cores)
+    let cpu_usage = sys.global_cpu_info().cpu_usage();
+    
+    // Get memory usage
+    let memory_used = sys.used_memory();
+    let memory_total = sys.total_memory();
+    let memory_percentage = if memory_total > 0 {
+        (memory_used as f32 / memory_total as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    // Get disk I/O stats (create separate disks instance)
+    let mut total_disk_usage = 0.0;
+    let total_read_bytes = 0;
+    let total_written_bytes = 0;
+    let disks = Disks::new_with_refreshed_list();
+    
+    if !disks.is_empty() {
+        for disk in &disks {
+            // For disk usage percentage, we'll use available space
+            let total_space = disk.total_space();
+            let available_space = disk.available_space();
+            if total_space > 0 {
+                let used_space = total_space - available_space;
+                let usage_percent = (used_space as f64 / total_space as f64) * 100.0;
+                total_disk_usage += usage_percent as f32;
+            }
+        }
+        total_disk_usage /= disks.len() as f32; // Average disk usage
+    }
+    
+    Ok(SystemMetrics {
+        cpu_usage,
+        memory_used,
+        memory_total,
+        memory_percentage,
+        disk_usage: total_disk_usage,
+        disk_read_bytes: total_read_bytes,
+        disk_written_bytes: total_written_bytes,
+    })
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .invoke_handler(tauri::generate_handler![
+        create_archive,
+        create_archive_async,
+        get_parent_directory,
+        extract_archive,
+        extract_archive_async,
+        list_archive,
+        delete_file,
+        get_system_metrics
+    ])
+    .setup(|app| {
+      if cfg!(debug_assertions) {
+        app.handle().plugin(
+          tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build(),
+        )?;
+      }
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}

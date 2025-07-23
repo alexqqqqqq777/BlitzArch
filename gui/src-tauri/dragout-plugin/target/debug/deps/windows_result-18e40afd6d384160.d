@@ -1,0 +1,10 @@
+/Users/oleksandr/Desktop/Development/blitzarch/gui/src-tauri/dragout-plugin/target/debug/deps/windows_result-18e40afd6d384160.d: /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/lib.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/bindings.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/com.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/strings.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/error.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/hresult.rs
+
+/Users/oleksandr/Desktop/Development/blitzarch/gui/src-tauri/dragout-plugin/target/debug/deps/libwindows_result-18e40afd6d384160.rmeta: /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/lib.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/bindings.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/com.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/strings.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/error.rs /Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/hresult.rs
+
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/lib.rs:
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/bindings.rs:
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/com.rs:
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/strings.rs:
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/error.rs:
+/Users/oleksandr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/windows-result-0.1.2/src/hresult.rs:
