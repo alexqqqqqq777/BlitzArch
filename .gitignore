@@ -4,7 +4,7 @@
 # Base Rust template
 /target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock (commit for application)
 
 # IDE / Editor
 .idea/
@@ -45,3 +45,14 @@ coverage/
 
 # Ignore node_modules if future GUI uses it
 node_modules/
+
+# GUI build output (Vite)
+/gui/dist/
+/gui/.vite/
+
+# Tauri build artifacts
+/gui/src-tauri/target/
+/gui/src-tauri/bundled/
+
+# Python virtual environments
+.venv/
