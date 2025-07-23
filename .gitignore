@@ -51,8 +51,16 @@ node_modules/
 /gui/.vite/
 
 # Tauri build artifacts
-/gui/src-tauri/target/
+/gui/**/target/
+/gui/**/debug/
 /gui/src-tauri/bundled/
+
+# Compiled binaries & object files
+*.rmeta
+*.o
+*.a
+*.dylib
+*.exe
 
 # Python virtual environments
 .venv/
