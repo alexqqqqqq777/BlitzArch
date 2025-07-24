@@ -282,7 +282,7 @@ where
         .sum();
     
     // Initialize progress tracker
-    let mut progress_tracker = ProgressTracker::new(num_shards, std::time::Duration::from_millis(100));
+    let mut progress_tracker = ProgressTracker::new(num_shards, std::time::Duration::from_millis(50));
     if let Some(callback) = progress_callback {
         progress_tracker.enable_with_callback(callback);
         progress_tracker.set_totals(files.len() as u64, total_bytes, num_shards);
@@ -789,7 +789,7 @@ where
     } else { None };
 
     // Initialize progress tracker for extraction
-    let mut progress_tracker = ProgressTracker::new(shard_count, std::time::Duration::from_millis(100));
+    let mut progress_tracker = ProgressTracker::new(shard_count, std::time::Duration::from_millis(50));
     if let Some(callback) = progress_callback {
         progress_tracker.enable_with_callback(callback);
         progress_tracker.set_totals(files_all.len() as u64, total_uncomp, shard_count);

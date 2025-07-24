@@ -271,7 +271,7 @@ impl ProgressTracker {
 
 impl Default for ProgressTracker {
     fn default() -> Self {
-        Self::new(num_cpus::get(), Duration::from_millis(100))
+        Self::new(num_cpus::get(), Duration::from_millis(50))
     }
 }
 

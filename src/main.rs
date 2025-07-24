@@ -104,7 +104,7 @@ fn create_cli_progress_callback(operation: &str) -> impl Fn(ProgressState) + Sen
         // Update every 100ms to avoid terminal spam, but always show 100% completion
         let should_update = state.progress_percent >= 100.0 || {
             let mut last = last_update.lock().unwrap();
-            if now.duration_since(*last).as_millis() >= 100 {
+            if now.duration_since(*last).as_millis() >= 50 {
                 *last = now;
                 true
             } else {
