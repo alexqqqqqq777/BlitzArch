@@ -97,6 +97,7 @@ fn test_encrypted_archive_creation_and_extraction() {
         &[],
         Some(password),
         Some(extract_dir.path()),
+        None, // strip_components
     )
     .unwrap();
 
@@ -134,7 +135,7 @@ fn test_archive_with_empty_file() {
 
     // 3. Extract the archive
     let extract_dir = tempdir().unwrap();
-    extract::extract_files(&archive_path, &[], None, Some(extract_dir.path())).unwrap();
+    extract::extract_files(&archive_path, &[], None, Some(extract_dir.path()), None).unwrap();
 
     // 4. Verify correctness
     assert_dirs_equal(source_dir.path(), extract_dir.path());
@@ -173,7 +174,7 @@ fn test_archive_with_empty_directory() {
 
     // 3. Extract the archive
     let extract_dir = tempdir().unwrap();
-    extract::extract_files(&archive_path, &[], None, Some(extract_dir.path())).unwrap();
+    extract::extract_files(&archive_path, &[], None, Some(extract_dir.path()), None).unwrap();
 
     // 4. Verify correctness
     let extracted_empty_dir = extract_dir.path().join("empty_dir");
@@ -216,6 +217,7 @@ fn test_extraction_fails_with_wrong_password() {
         &[],
         Some(wrong_password),
         Some(extract_dir.path()),
+        None, // strip_components
     );
 
     // 4. Verify failure
@@ -257,7 +259,7 @@ fn test_extraction_fails_without_password_for_encrypted_archive() {
 
     // 3. Attempt extraction with no password
     let extract_dir = tempdir().unwrap();
-    let result = extract::extract_files(&archive_path, &[], None, Some(extract_dir.path()));
+    let result = extract::extract_files(&archive_path, &[], None, Some(extract_dir.path()), None);
 
     // 4. Verify failure
     assert!(result.is_err());

@@ -30,7 +30,8 @@ use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write, BufWriter};
+use scopeguard;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
 use std::path::{Path, PathBuf};
@@ -40,6 +41,40 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 use crate::crypto;
+use crate::progress::{ProgressTracker, ProgressState};
+
+/// Decrypts AES-GCM ciphertext provided as a reader (ciphertext body) and writes plaintext to writer.
+/// `tag` must be the 16-byte authentication tag located at the end of the ciphertext stream.
+use aes_gcm_stream::Aes256GcmStreamDecryptor;
+
+fn decrypt_stream_prekey<R: Read, W: Write>(mut rdr: R, mut wtr: W, key: &[u8; 32], nonce: &[u8; 12], tag: &[u8; 16]) -> Result<(), Box<dyn Error>> {
+    use std::io::Read;
+    // Read the ciphertext body into memory in chunks (few MiB) to avoid many allocations.
+    // Stream decrypt to avoid allocating whole shard.
+    const CHUNK: usize = 256 * 1024; // 256 KiB
+    let mut decryptor = Aes256GcmStreamDecryptor::new(*key, nonce);
+    let mut buf = [0u8; CHUNK];
+    loop {
+        let n = rdr.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        let out = decryptor.update(&buf[..n]);
+        if !out.is_empty() {
+            wtr.write_all(&out)?;
+        }
+    }
+    // feed tag bytes (may output last partial plaintext)
+    let tag_out = decryptor.update(tag);
+    if !tag_out.is_empty() {
+        wtr.write_all(&tag_out)?;
+    }
+    let final_block = decryptor.finalize().map_err(|e| format!("decrypt failed: {}", e))?;
+    if !final_block.is_empty() {
+        wtr.write_all(&final_block)?;
+    }
+    Ok(())
+}
 
 /// Magic footer for Katana index (version 1)
 const KATANA_MAGIC: &[u8; 8] = b"KATIDX01";
@@ -95,8 +130,15 @@ struct ShardInfo {
 }
 
 /// The main index structure for a Katana archive.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct KatanaIndex {
+    /// CRC32 of the JSON representation for integrity (always present)
+    #[serde(default)]
+    crc32: u32,
+    /// Optional HMAC-SHA256 of JSON when archive is encrypted (Argon2 derived key)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hmac: Option<[u8; 32]>,
+
     /// Optional 16-byte salt used for key derivation when archive is encrypted.
     #[serde(skip_serializing_if = "Option::is_none")]
     salt: Option<[u8; 16]>,
@@ -169,6 +211,31 @@ pub fn create_katana_archive(
     threads: usize,
     password: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
+    create_katana_archive_with_progress(inputs, output_path, threads, 0, None, password, None::<fn(ProgressState)>)
+}
+
+/// Creates a new Katana archive with optional progress tracking.
+///
+/// This is the internal implementation that supports progress callbacks.
+///
+/// # Arguments
+/// * `inputs` - A slice of paths to files or directories to be archived.
+/// * `output_path` - The path where the final `.blz` archive will be created.
+/// * `threads` - The number of parallel shards to create. If `0`, it will auto-detect based on the number of CPU cores.
+/// * `password` - Optional password for encryption.
+/// * `progress_callback` - Optional callback for progress updates.
+pub fn create_katana_archive_with_progress<F>(
+    inputs: &[PathBuf],
+    output_path: &Path,
+    threads: usize,
+    codec_threads: u32,
+    mem_budget_mb: Option<u64>,
+    password: Option<String>,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(ProgressState) + Send + Sync + 'static,
+{
     // 1. Enumerate all files
     let mut files = Vec::new();
     for path in inputs {
@@ -188,6 +255,39 @@ pub fn create_katana_archive(
     }
     let num_shards = if threads == 0 { num_cpus::get() } else { threads };
     let num_shards = num_shards.max(1);
+
+    // ── Определяем количество потоков кодека в зависимости от budget/параметра ──
+    let codec_thr_auto: u32 = if codec_threads > 0 {
+        codec_threads
+    } else {
+        if let Some(mb) = mem_budget_mb {
+            if mb > 0 {
+                // 4 MiB flush buffer * 3 in-flight = ~12 MiB per thread
+                let bytes_per_thread: u64 = 4 * 1024 * 1024 * 3;
+                let budget_bytes = mb * 1024 * 1024;
+                let est = std::cmp::max(1, (budget_bytes / bytes_per_thread) as u32);
+                std::cmp::min(est, num_cpus::get() as u32)
+            } else {
+                num_cpus::get() as u32
+            }
+        } else {
+            num_cpus::get() as u32
+        }
+    };
+
+    
+    // Calculate total size for progress tracking
+    let total_bytes: u64 = files.iter()
+        .map(|p| p.metadata().map(|m| m.len()).unwrap_or(0))
+        .sum();
+    
+    // Initialize progress tracker
+    let mut progress_tracker = ProgressTracker::new(num_shards, std::time::Duration::from_millis(100));
+    if let Some(callback) = progress_callback {
+        progress_tracker.enable_with_callback(callback);
+        progress_tracker.set_totals(files.len() as u64, total_bytes, num_shards);
+    }
+    let progress_tracker = std::sync::Arc::new(std::sync::Mutex::new(progress_tracker));
 
     println!(
         "[katana] Compressing {} files with {} shards → {}",
@@ -224,7 +324,15 @@ pub fn create_katana_archive(
     #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
 
+    // Pre-derive encryption key once (memory safe)
+    use std::sync::Arc;
+    let key_bytes_arc: Option<Arc<[u8; 32]>> = if let (Some(pass), Some(ref salt)) = (password.as_ref(), archive_salt.as_ref()) {
+        Some(Arc::new(crypto::derive_key_argon2(pass, &salt[..])))
+    } else { None };
+
     let mut index = KatanaIndex {
+        crc32: 0,
+        hmac: None,
         salt: archive_salt,
         shards: Vec::with_capacity(num_shards),
         files: Vec::new(),
@@ -235,8 +343,15 @@ pub fn create_katana_archive(
         for (shard_id, chunk) in file_chunks.into_iter().enumerate() {
             let meta_tx = meta_tx.clone();
             let base_dir = Arc::clone(&base_dir);
-            let password_cl = password.clone();
-            let salt_cl = archive_salt;
+            
+            let key_arc_cl = key_bytes_arc.clone();
+            let progress_tracker_cl = Arc::clone(&progress_tracker);
+            
+            // Get thread-specific metrics handle
+            let thread_metrics = {
+                let tracker = progress_tracker_cl.lock().unwrap();
+                tracker.get_thread_metrics(shard_id)
+            };
 
             s.spawn(move |_| {
                 // Calculate total uncompressed size to size zstd encoder buffer (optional)
@@ -246,7 +361,7 @@ pub fn create_katana_archive(
                     .sum();
 
                 // Prepare zstd encoder
-                let zstd_threads = (num_cpus::get() / 2).max(1) as u32;
+                let zstd_threads = codec_thr_auto.max(1);
                 // Start with 4 MiB buffer regardless of shard size to avoid large allocations
                 let mut encoder = zstd::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 0)
                     .expect("encoder");
@@ -280,6 +395,11 @@ pub fn create_katana_archive(
                         }
                         encoder.write_all(&in_buf[..rd]).expect("enc write");
                     }
+                    
+                    // Record file processed (zero-overhead when progress disabled)
+                    if let Some(ref metrics) = thread_metrics {
+                        metrics.record_file_processed(meta.len());
+                    }
                 }
                 let comp_buf = encoder.finish().expect("finish");
 
@@ -287,10 +407,11 @@ pub fn create_katana_archive(
 
 
                 // Send to coordinator
-                let (final_buf, nonce_opt) = if let Some(ref pass) = password_cl {
-                        let salt = salt_cl.expect("salt present");
-                        let (enc, nonce) = crypto::encrypt(&comp_buf, pass, &salt).expect("encrypt");
-                        (enc, Some(nonce))
+                let (final_buf, nonce_opt) = if let Some(ref key_bytes) = key_arc_cl {
+                        let mut comp_buf = comp_buf; // take ownership
+let nonce_vec = crypto::encrypt_prekey_in_place(&mut comp_buf, key_bytes).expect("encrypt");
+let enc = comp_buf;
+                        (enc, Some(nonce_vec))
                     } else {
                         (comp_buf, None)
                     };
@@ -325,6 +446,12 @@ pub fn create_katana_archive(
                 nonce: nonce_opt,
             });
             files_by_shard[sid] = Some(local_files);
+            
+            // Record shard completion and emit progress
+            {
+                let tracker = progress_tracker.lock().unwrap();
+                tracker.record_shard_completed();
+            }
         }
 
         for sid in 0..num_shards {
@@ -345,7 +472,32 @@ if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
     eprintln!("[dbg] index sample ({} paths): {:?}", sample.len(), sample);
 }
 
-let index_json = serde_json::to_vec(&index)?;
+// --- Integrity codes -------------------------------------------------------
+    use crc32fast::Hasher as Crc32Hasher;
+    let mut hasher = Crc32Hasher::new();
+    let tmp_json = serde_json::to_vec(&index)?;
+    hasher.update(&tmp_json);
+    let crc32_val = hasher.finalize();
+
+    let mut index_with_hash = index.clone();
+    index_with_hash.crc32 = crc32_val;
+
+    // If encrypted, compute HMAC-SHA256 with key derived from password+salt
+    if let (Some(pass), Some(salt)) = (password, archive_salt) {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256 as Sha256Mac;
+        type HmacSha256 = Hmac<Sha256Mac>;
+        let key = crypto::derive_key_argon2(&pass, &salt);
+        let mut mac = HmacSha256::new_from_slice(&key).expect("HMAC new");
+        mac.update(&tmp_json);
+        let result = mac.finalize();
+        let bytes = result.into_bytes();
+        let mut h = [0u8; 32];
+        h.copy_from_slice(&bytes);
+        index_with_hash.hmac = Some(h);
+    }
+
+    let index_json = serde_json::to_vec(&index_with_hash)?;
     let mut encoder = zstd::Encoder::new(Vec::new(), 3)?;
     encoder.write_all(&index_json)?;
     let index_comp = encoder.finish()?;
@@ -359,11 +511,25 @@ let index_json = serde_json::to_vec(&index)?;
     out_file.write_all(&index_json_size.to_le_bytes())?;
     out_file.write_all(KATANA_MAGIC)?;
 
-    println!(
-        "[katana] Finished archive: {} shards, {:.2} MiB compressed index",
-        index.shards.len(),
-        index_comp_size as f64 / (1024.0 * 1024.0)
-    );
+    // Final progress update and statistics
+    {
+        let tracker = progress_tracker.lock().unwrap();
+        let final_state = tracker.get_progress_state();
+        
+        // Итоговый размер архива со всеми шард-данными
+        let compressed_size = out_file.metadata().map(|m| m.len()).unwrap_or(0);
+
+        println!(
+            "[katana] Archive complete | Files: {} | Time: {:.1}s | Ratio: {:.2}:1 | Speed: {:.1} MB/s",
+            final_state.processed_files,
+            final_state.elapsed_time.as_secs_f32(),
+            if compressed_size > 0 { total_bytes as f64 / compressed_size as f64 } else { 0.0 },
+            final_state.speed_mbps
+        );
+        
+        // Force final progress emission to 100%
+        tracker.force_completion();
+    }
 
     Ok(())
 }
@@ -390,12 +556,38 @@ pub fn is_katana_archive(path: &Path) -> std::io::Result<bool> {
 /// # Arguments
 /// * `archive_path` - The path to the Katana archive file.
 /// * `output_dir` - The directory where the contents will be extracted.
+/// * `password` - Optional password for encrypted archives.
+/// * `strip_components` - Optional number of leading path components to strip.
 pub fn extract_katana_archive(
     archive_path: &Path,
     output_dir: &Path,
     password: Option<String>,
+    strip_components: Option<u32>,
 ) -> Result<(), Box<dyn Error>> {
-    extract_katana_archive_internal(archive_path, output_dir, &[], password)
+    extract_katana_archive_with_progress(archive_path, output_dir, &[], password, strip_components, None::<fn(ProgressState)>)
+}
+
+/// Extracts a Katana archive with optional progress tracking.
+///
+/// # Arguments
+/// * `archive_path` - The path to the Katana archive file.
+/// * `output_dir` - The directory where the contents will be extracted.
+/// * `selected_files` - Empty slice means extract all files.
+/// * `password` - Optional password for encrypted archives.
+/// * `strip_components` - Optional number of leading path components to strip.
+/// * `progress_callback` - Optional callback for progress updates.
+pub fn extract_katana_archive_with_progress<F>(
+    archive_path: &Path,
+    output_dir: &Path,
+    selected_files: &[PathBuf],
+    password: Option<String>,
+    strip_components: Option<u32>,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(ProgressState) + Send + Sync + 'static,
+{
+    extract_katana_archive_with_progress_impl(archive_path, output_dir, selected_files, password, strip_components, progress_callback)
 }
 
 /// Lists all files in a Katana archive without extracting them.
@@ -433,6 +625,41 @@ pub fn list_katana_files(
     f.read_exact(&mut idx_comp)?;
     let idx_json = zstd::decode_all(&*idx_comp)?;
     let index: KatanaIndex = serde_json::from_slice(&idx_json)?;
+    // ---------------- Integrity verification ------------------
+    use crc32fast::Hasher as Crc32Hasher;
+    // При создании архива вычисляется CRC по JSON с нулевым полем crc32.
+    // Для корректной проверки воспроизводим тот же алгоритм.
+    let mut index_for_crc = index.clone();
+    index_for_crc.crc32 = 0;
+    index_for_crc.hmac = None; // CRC вычисляется по JSON без HMAC
+    let idx_json_zero = serde_json::to_vec(&index_for_crc)?;
+    let mut hasher = Crc32Hasher::new();
+    hasher.update(&idx_json_zero);
+    let crc_now = hasher.finalize();
+    if index.crc32 != 0 && index.crc32 != crc_now {
+        return Err("Index CRC mismatch".into());
+    }
+    if let Some(expected_hmac) = &index.hmac {
+        if let (Some(pass), Some(salt)) = (password.as_ref(), index.salt) {
+            use hmac::{Hmac, Mac};
+            use sha2::Sha256 as Sha256Mac;
+            type HmacSha256 = Hmac<Sha256Mac>;
+            let key = crypto::derive_key_argon2(&pass, &salt);
+            // Для проверки HMAC нужно сериализовать индекс с hmac = None,
+            // ровно так же, как при вычислении в create_katana_archive.
+            let mut idx_no_hmac = index.clone();
+            idx_no_hmac.crc32 = 0;
+            idx_no_hmac.hmac = None;
+            let idx_json_no_hmac = serde_json::to_vec(&idx_no_hmac)?;
+            let mut mac = HmacSha256::new_from_slice(&key).expect("HMAC new");
+            mac.update(&idx_json_no_hmac);
+            if mac.verify_slice(expected_hmac).is_err() {
+                return Err("Index HMAC verification failed".into());
+            }
+        } else {
+            return Err("Encrypted archive: password required for HMAC verification".into());
+        }
+    }
     
     // Print archive information
     if index.salt.is_some() && password.is_none() {
@@ -455,7 +682,23 @@ pub fn extract_katana_archive_internal(
     output_dir: &Path,
     selected_files: &[PathBuf],
     password: Option<String>,
+    strip_components: Option<u32>,
 ) -> Result<(), Box<dyn Error>> {
+    extract_katana_archive_with_progress(archive_path, output_dir, selected_files, password, strip_components, None::<fn(ProgressState)>)
+}
+
+/// Internal implementation of Katana extraction with progress support.
+fn extract_katana_archive_with_progress_impl<F>(
+    archive_path: &Path,
+    output_dir: &Path,
+    selected_files: &[PathBuf],
+    password: Option<String>,
+    strip_components: Option<u32>,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(ProgressState) + Send + Sync + 'static,
+{
     let mut f = File::open(archive_path)?;
     let len = f.metadata()?.len();
     if len < 24 {
@@ -480,6 +723,41 @@ pub fn extract_katana_archive_internal(
     f.read_exact(&mut idx_comp)?;
     let idx_json = zstd::decode_all(&*idx_comp)?;
     let index: KatanaIndex = serde_json::from_slice(&idx_json)?;
+    // ---------------- Integrity verification ------------------
+    use crc32fast::Hasher as Crc32Hasher;
+    // При создании архива вычисляется CRC по JSON с нулевым полем crc32.
+    // Для корректной проверки воспроизводим тот же алгоритм.
+    let mut index_for_crc = index.clone();
+    index_for_crc.crc32 = 0;
+    index_for_crc.hmac = None; // CRC вычисляется по JSON без HMAC
+    let idx_json_zero = serde_json::to_vec(&index_for_crc)?;
+    let mut hasher = Crc32Hasher::new();
+    hasher.update(&idx_json_zero);
+    let crc_now = hasher.finalize();
+    if index.crc32 != 0 && index.crc32 != crc_now {
+        return Err("Index CRC mismatch".into());
+    }
+    if let Some(expected_hmac) = &index.hmac {
+        if let (Some(pass), Some(salt)) = (password.as_ref(), index.salt) {
+            use hmac::{Hmac, Mac};
+            use sha2::Sha256 as Sha256Mac;
+            type HmacSha256 = Hmac<Sha256Mac>;
+            let key = crypto::derive_key_argon2(&pass, &salt);
+            // Для проверки HMAC нужно сериализовать индекс с hmac = None,
+            // ровно так же, как при вычислении в create_katana_archive.
+            let mut idx_no_hmac = index.clone();
+            idx_no_hmac.crc32 = 0;
+            idx_no_hmac.hmac = None;
+            let idx_json_no_hmac = serde_json::to_vec(&idx_no_hmac)?;
+            let mut mac = HmacSha256::new_from_slice(&key).expect("HMAC new");
+            mac.update(&idx_json_no_hmac);
+            if mac.verify_slice(expected_hmac).is_err() {
+                return Err("Index HMAC verification failed".into());
+            }
+        } else {
+            return Err("Encrypted archive: password required for HMAC verification".into());
+        }
+    }
 
     // Prepare shard file slices
     let mut file_cursor = 0usize;
@@ -504,6 +782,20 @@ pub fn extract_katana_archive_internal(
     let had_error = Arc::new(AtomicBool::new(false));
 
     let salt_opt = index.salt;
+    
+    // Pre-derive encryption key once for extraction (if encrypted)
+    let key_bytes_arc: Option<Arc<[u8; 32]>> = if let (Some(ref pass), Some(ref salt)) = (password.as_ref(), salt_opt.as_ref()) {
+        Some(Arc::new(crypto::derive_key_argon2(pass, &salt[..])))
+    } else { None };
+
+    // Initialize progress tracker for extraction
+    let mut progress_tracker = ProgressTracker::new(shard_count, std::time::Duration::from_millis(100));
+    if let Some(callback) = progress_callback {
+        progress_tracker.enable_with_callback(callback);
+        progress_tracker.set_totals(files_all.len() as u64, total_uncomp, shard_count);
+    }
+    let progress_tracker = std::sync::Arc::new(std::sync::Mutex::new(progress_tracker));
+    
     println!(
         "[katana] Extracting {} shards (filter: {} files)…",
         shards.len(),
@@ -521,24 +813,39 @@ pub fn extract_katana_archive_internal(
                 continue; // skip shard entirely
             }
 
-            let password_cl = password.clone();
-            let salt_cl = salt_opt;
+            let key_arc_cl = key_bytes_arc.clone();
             let error_flag = had_error.clone();
             let wanted_cl = wanted.clone();
+            let strip_components_cl = strip_components;
+            let progress_tracker_cl = Arc::clone(&progress_tracker);
+            
+            // Get thread-specific metrics handle for this shard
+            let thread_metrics = {
+                let tracker = progress_tracker_cl.lock().unwrap();
+                tracker.get_thread_metrics(shard_info.file_count % 8) // Distribute across available metrics
+            };
+            
             // Pass full slice to maintain correct byte positions
             let shard_vec: Vec<FileEntry> = shard_files_slice.to_vec();
             s.spawn(move |_| {
-                if let Err(e) = extract_katana_shard(
+                if let Err(e) = extract_katana_shard_with_progress(
                     &archive_path,
                     &out_root,
                     &shard_info,
                     &shard_vec,
                     &wanted_cl,
-                    salt_cl,
-                    password_cl.as_deref(),
+                    key_arc_cl.as_deref(),
+                    strip_components_cl,
+                    thread_metrics,
                 ) {
                     eprintln!("[katana] shard extract error: {}", e);
                     error_flag.store(true, Ordering::SeqCst);
+                }
+                
+                // Record shard completion
+                {
+                    let tracker = progress_tracker_cl.lock().unwrap();
+                    tracker.record_shard_completed();
                 }
             });
         }
@@ -554,10 +861,18 @@ pub fn extract_katana_archive_internal(
         total_comp as f64 / (1024.0 * 1024.0),
         ratio,
     );
+    
+    // Force final progress emission to 100%
+    {
+        let tracker = progress_tracker.lock().unwrap();
+        tracker.force_completion();
+    }
+    
     Ok(())
 }
 
 use std::collections::HashSet;
+use crate::progress::ThreadMetrics;
 
 fn extract_katana_shard(
     archive_path: &Path,
@@ -565,8 +880,30 @@ fn extract_katana_shard(
     shard_info: &ShardInfo,
     files: &[FileEntry],
     wanted: &HashSet<String>,
-    archive_salt: Option<[u8; 16]>,
-    password: Option<&str>,
+    key_bytes: Option<&[u8; 32]>,
+    strip_components: Option<u32>,
+) -> Result<(), Box<dyn Error>> {
+    extract_katana_shard_with_progress(
+        archive_path, 
+        out_root, 
+        shard_info, 
+        files, 
+        wanted, 
+        key_bytes, 
+        strip_components,
+        None
+    )
+}
+
+fn extract_katana_shard_with_progress(
+    archive_path: &Path,
+    out_root: &Path,
+    shard_info: &ShardInfo,
+    files: &[FileEntry],
+    wanted: &HashSet<String>,
+    key_bytes: Option<&[u8; 32]>,
+    strip_components: Option<u32>,
+    thread_metrics: Option<Arc<ThreadMetrics>>,
 ) -> Result<(), Box<dyn Error>> {
     use std::io::{BufWriter, Cursor, Read};
     let mut shard_file = File::open(archive_path)?;
@@ -574,16 +911,42 @@ fn extract_katana_shard(
 
     // Build a reader depending on encryption
     let reader: Box<dyn Read> = if let Some(nc) = shard_info.nonce {
-        // --- Encrypted shard: we still need the whole ciphertext in memory ---
-        let mut comp_buf = Vec::with_capacity(shard_info.compressed_size as usize);
-        std::io::Read::by_ref(&mut shard_file)
-            .take(shard_info.compressed_size)
-            .read_to_end(&mut comp_buf)?;
-        let salt = archive_salt.ok_or("Missing salt in encrypted archive")?;
-        let pass = password.ok_or("Password required for encrypted archive")?;
-        let dec = crate::crypto::decrypt(&comp_buf, pass, &salt, &nc)
-            .map_err(|e| format!("decrypt failed: {:?}", e))?;
-        Box::new(Cursor::new(dec))
+        // --- Encrypted shard: stream decrypt to temp file (low RAM) ---
+        let body_size = shard_info
+            .compressed_size
+            .checked_sub(16)
+            .ok_or("shard size too small for tag")?;
+        let key = key_bytes.ok_or("Password/key required for encrypted archive")?;
+
+        // Read tag located at end of shard first
+        shard_file.seek(SeekFrom::Start(shard_info.offset + body_size))?;
+        let mut tag = [0u8; 16];
+        shard_file.read_exact(&mut tag)?;
+
+        // Seek back to start of ciphertext body
+        shard_file.seek(SeekFrom::Start(shard_info.offset))?;
+        // Ciphertext body reader (excluding tag)
+        let mut body_reader = (&mut shard_file).take(body_size);
+
+        // Temp file to hold decrypted stream (avoids holding whole Vec).
+        // Include a high-resolution timestamp to ensure uniqueness across concurrent extractions.
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let tmp_path = std::env::temp_dir()
+            .join(format!("katana_dec_{}_{}.tmp", shard_info.offset, unique));
+        {
+            let mut tmp_f = BufWriter::new(File::create(&tmp_path)?);
+            decrypt_stream_prekey(&mut body_reader, &mut tmp_f, key, &nc, &tag)
+                .map_err(|e| format!("decrypt failed: {:?}", e))?;
+            tmp_f.flush()?;
+        }
+        // Ensure cleanup afterwards
+        let cleanup = tmp_path.clone();
+        scopeguard::defer! { fs::remove_file(&cleanup).ok(); }
+        let opened = File::open(&tmp_path)?;
+        Box::new(opened)
     } else {
         // --- Not encrypted: stream directly from file, no large allocation ---
         shard_file.seek(SeekFrom::Start(shard_info.offset))?;
@@ -646,13 +1009,55 @@ fn extract_katana_shard(
                 }
             }
             
+            // Apply strip_components if specified
+            if let Some(n) = strip_components {
+                let path_buf = std::path::Path::new(&normalized_path).to_path_buf();
+                let stripped = crate::extract::strip_path_components(&path_buf, n);
+                normalized_path = stripped.to_string_lossy().into_owned();
+            }
+
+            // ------------------------------------------------------------------
+            // Security hardening: prevent path traversal ("../") and symlink abuse
+            // ------------------------------------------------------------------
+            // Reject any remaining parent directory components
+            if std::path::Path::new(&normalized_path)
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                eprintln!("[katana] ⚠️  Skipping suspicious entry with '..': {}", normalized_path);
+                // Skip file bytes but continue extraction
+                while remaining > 0 {
+                    let to_read = std::cmp::min(in_buf.len() as u64, remaining) as usize;
+                    let rd = decoder.read(&mut in_buf[..to_read])?;
+                    if rd == 0 { return Err("Unexpected EOF while skipping".into()); }
+                    remaining -= rd as u64;
+                }
+                continue;
+            }
+
             let out_path = out_root.join(&normalized_path);
+
+            // Ensure the final canonicalized path is inside output root
+            if let (Ok(root_real), Ok(target_real)) = (out_root.canonicalize(), out_path.parent().unwrap_or(out_root).canonicalize()) {
+                if !target_real.starts_with(&root_real) {
+                    eprintln!("[katana] ⚠️  Detected path escaping output dir: {:?}", out_path);
+                    while remaining > 0 {
+                        let to_read = std::cmp::min(in_buf.len() as u64, remaining) as usize;
+                        let rd = decoder.read(&mut in_buf[..to_read])?;
+                        if rd == 0 { return Err("Unexpected EOF while skipping".into()); }
+                        remaining -= rd as u64;
+                    }
+                    continue;
+                }
+            }
+            
+            
             if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
                 eprintln!("[dbg] extract -> {:?}", out_path);
             }
             
             // Проверяем, не является ли путь директорией
-            if out_path.exists() && out_path.is_dir() {
+            if out_path.exists() && (out_path.is_dir() || out_path.symlink_metadata()?.file_type().is_symlink()) {
                 // Если это директория, пропускаем этот файл и не пытаемся его создать
                 eprintln!("[katana] Warning: skipping file that conflicts with existing directory: {:?}", out_path);
                 // Пропускаем данные файла
@@ -685,7 +1090,14 @@ fn extract_katana_shard(
             }
             out_f.flush()?;
             if let Some(perm) = entry.permissions {
-                crate::fsx::set_unix_permissions(&out_path, perm)?;
+                // Strip SUID/SGID bits for safety
+                let safe_perm = perm & 0o777; // удаляем 0o4000/0o2000
+                crate::fsx::set_unix_permissions(&out_path, safe_perm)?;
+            }
+            
+            // Record file extraction (zero-overhead when progress disabled)
+            if let Some(ref metrics) = thread_metrics {
+                metrics.record_file_processed(entry.size);
             }
         } else {
             // Skip this file's bytes
@@ -696,6 +1108,11 @@ fn extract_katana_shard(
                     return Err("Unexpected EOF while skipping".into());
                 }
                 remaining -= rd as u64;
+            }
+            
+            // Still record progress for skipped files (zero-overhead when progress disabled)
+            if let Some(ref metrics) = thread_metrics {
+                metrics.record_file_processed(entry.size);
             }
         }
     }

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { Gauge, Zap } from 'lucide-react';
 
-export default function SpeedGauge({ speed, isActive, title = "Скорость создания" }) {
+export default function SpeedGauge({ speed, isActive, title = "Creation Speed" }) {
   const normalizedSpeed = Math.min(speed, 200);
   const angle = (normalizedSpeed / 200) * 180 - 90;
   const speedColor = speed > 150 ? '#00FF00' : speed > 100 ? '#FFD700' : speed > 50 ? '#FF6B35' : '#FF0080';
@@ -138,7 +138,7 @@ export default function SpeedGauge({ speed, isActive, title = "Скорость 
             >
               <Zap className="w-4 h-4" />
             </motion.div>
-            <span className="text-sm font-medium">Активно</span>
+            <span className="text-sm font-medium">Active</span>
           </motion.div>
         )}
       </CardContent>

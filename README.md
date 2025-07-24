@@ -17,9 +17,10 @@
 - **High-Speed Compression/Decompression**: Powered by `zstd` for a great balance of speed and compression ratio.
 - **Massively Parallel**: Utilizes all available CPU cores for both compression and decompression to minimize processing time.
 - **Optimized I/O**: Employs techniques like memory-mapped files and sharded workers to reduce I/O bottlenecks.
+- **Memory-Aware Compression**: New `--memory-budget` flag lets you cap RAM usage; Katana dynamically scales codec threads to stay within the limit.
 - **The `.blz` (Katana) Format**: A custom, highly parallelizable archive format designed from the ground up for maximum extraction speed.
 - **Cross-Platform Compatible**: Robust path handling that works consistently across Windows, macOS, and Linux with secure sanitization of absolute paths.
-- **Strong Encryption**: AES-256-GCM authenticated encryption to keep your data secure.
+- **Strong Encryption**: On-the-fly **streaming** AES-256-GCM encryption (no temp files) keeps your data secure.
 
 ## Download (pre-built binaries)
 
@@ -109,10 +110,13 @@ BlitzArch exposes several power-user flags beyond the common `create / extract /
 | Flag | Purpose |
 |------|---------|
 | `--no-katana` | Switch off Katana and use a simple tar-like container compressed with Zstandard. |
-| `--adaptive` | Automatically stores incompressible chunks instead of compressing them, saving CPU time on large binary blobs. |
+| `--adaptive` | Stores incompressible chunks instead of compressing them, saving CPU time on large binary blobs. **Ignored for Katana (default) archives; only applies with `--no-katana`.** |
+| `--memory-budget N` | Limit RAM used by Katana compression. Accepts: absolute size in **MiB** (e.g. `500`), or percentage of system RAM when suffixed with `%` (e.g. `50%`). `0` or omitted = unlimited. Katana auto-adjusts codec threads to fit the budget. |
 | `--use-lzma2` / `--lz-level N` | Switch the compressor from Zstandard (default) to multi-threaded LZMA2. Helpful when maximum ratio is critical and extra CPU time/RAM is acceptable. |
 | `--bundle-size N` | Target bundle size in **MiB** for Katana archives. Larger bundles improve ratio; smaller favour parallelism. Default: **32 MiB**. |
 | `--codec-threads N` | Threads _inside_ each compressor (0 = auto). |
+| `--threads N` | Total worker threads for archive creation (0 = auto, default: all CPU cores). |
+| `--strip-components N` | During extraction, remove N leading path components from each file (same as `tar --strip-components`). Useful to avoid absolute paths or deep directory nesting. |
 
 > **Deprecated / hidden flags**: `--sharded`, `--seekable`, `--preprocess`, `--katana` – these experimental or legacy options are no longer maintained and will be removed in a future release.
 

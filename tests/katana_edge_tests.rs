@@ -88,7 +88,7 @@ fn roundtrip_with_password(password: &str) {
     let arch_path = arch.path().join("fuzz.blz");
     katana::create_katana_archive(&[src.path().to_path_buf()], &arch_path, 0, Some(password.to_string())).unwrap();
     let out = tempdir().unwrap();
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], Some(password.to_string())).unwrap();
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], Some(password.to_string()), None).unwrap();
     dirs_equal(src.path(), out.path());
 }
 
@@ -106,7 +106,7 @@ fn katana_truncated_footer() {
     f.set_len(len - 32).unwrap();
     // Archive should now be invalid
     assert_eq!(katana::is_katana_archive(&arch_path).unwrap_or(false), false);
-    let res = katana::extract_katana_archive_internal(&arch_path, src.path(), &[], None);
+    let res = katana::extract_katana_archive_internal(&arch_path, src.path(), &[], None, None);
     assert!(res.is_err());
 }
 
@@ -148,7 +148,7 @@ fn katana_sparse_huge_file() {
     katana::create_katana_archive(&[src_dir.path().to_path_buf()], &arch_path, 0, None).unwrap();
 
     let out_dir = tempdir().unwrap();
-    katana::extract_katana_archive_internal(&arch_path, out_dir.path(), &[], None).unwrap();
+    katana::extract_katana_archive_internal(&arch_path, out_dir.path(), &[], None, None).unwrap();
 
     // Verify size preserved and sentinel byte matches
     let out_file = out_dir.path().join("huge_sparse.bin");
@@ -180,7 +180,7 @@ fn katana_million_files_random_access() {
 
     let out_dir = tempdir().unwrap();
     let sample_paths: Vec<_> = sample.iter().map(|s| Path::new(s).to_path_buf()).collect();
-    katana::extract_katana_archive_internal(&arch_path, out_dir.path(), &sample_paths, None).unwrap();
+    katana::extract_katana_archive_internal(&arch_path, out_dir.path(), &sample_paths, None, None).unwrap();
 
     // Verify extracted subset
     for name in &sample {

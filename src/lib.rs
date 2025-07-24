@@ -38,7 +38,8 @@ pub mod error;
 pub use error::ArchiverError;
 
 pub mod workers;
-
+pub mod zstd_block;
+pub mod progress;
 pub mod katana;
 pub mod katana_stream;
 
@@ -47,6 +48,3 @@ pub mod fsx;
 
 // Global dictionary cache (POC)
 pub mod dict_cache;
-
-// Parallel block decoder for zstd
-pub mod zstd_block;

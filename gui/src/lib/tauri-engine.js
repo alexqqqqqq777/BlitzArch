@@ -44,7 +44,7 @@ class TauriBlitzArchEngine {
         bundleSize: bundleSize,
         bundle_size: bundleSize,
         password: password,
-        threads: threads, // null -> авто выбор потока
+        threads: threads, // null -> auto thread selection
         codecThreads: codecThreads,
         codec_threads: codecThreads,
         memoryBudget: memoryBudget,
@@ -57,7 +57,8 @@ class TauriBlitzArchEngine {
         return {
           success: true,
           output: result.output,
-          archivePath: result.archive_path
+          archivePath: result.archive_path,
+          stats: result.stats || null
         };
       } else {
         return {
@@ -184,8 +185,8 @@ class TauriBlitzArchEngine {
       console.log('  - options.specificFiles:', options.specificFiles);
       console.log('  - stripComponents (initial):', stripComponents);
 
-    // При выборочном извлечении (specificFiles) запрещаем auto-strip и принудительно ставим 0,
-    // иначе движок не найдёт совпадений по путям и извлечёт всё содержимое.
+    // For selective extraction (specificFiles) disable auto-strip and force 0,
+    // otherwise engine won't find path matches and will extract all content.
     if (options.specificFiles && options.specificFiles.length > 0) {
       console.log('🎯 Using specificFiles mode: stripComponents = 0');
       stripComponents = 0;
@@ -206,9 +207,7 @@ class TauriBlitzArchEngine {
         output_dir: outputDir,
         outputDir: outputDir,
         password: options.password || null,
-        strip_components: stripComponents != null ? stripComponents : null,
         stripComponents: stripComponents != null ? stripComponents : null,
-        specific_files: options.specificFiles || null,
         specificFiles: options.specificFiles || null
       });
       
@@ -216,7 +215,8 @@ class TauriBlitzArchEngine {
         console.log('✅ Archive extracted successfully');
         return {
           success: true,
-          output: result.output
+          output: result.output,
+          stats: result.stats || null
         };
       } else {
         console.error('❌ Archive extraction failed:', result.error);
@@ -258,10 +258,8 @@ class TauriBlitzArchEngine {
         return { success: true, files };
       }
 
-      // Fall back to old CLI approach if needed
-      const result = await invoke('list_archive', {
-        archivePath: archivePath
-      });
+      // If native async index unavailable, return error
+      return { success: false, error: 'list_archive_async failed or returned unexpected data' };
       
       if (result.success) {
         console.log('✅ Archive listed successfully');

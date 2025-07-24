@@ -5,11 +5,11 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Eye, EyeOff, Lock, Shield } from 'lucide-react';
 
-export default function PasswordField({ password, onPasswordChange, placeholder = "Пароль для защиты" }) {
+export default function PasswordField({ password, onPasswordChange, placeholder = "Password for protection" }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const getPasswordStrength = (pass) => {
-    if (!pass) return { score: 0, label: 'Нет', color: 'bg-gray-500' };
+    if (!pass) return { score: 0, label: 'None', color: 'bg-gray-500' };
     
     let score = 0;
     let checks = {
@@ -22,10 +22,10 @@ export default function PasswordField({ password, onPasswordChange, placeholder 
     
     score = Object.values(checks).filter(Boolean).length;
     
-    if (score <= 2) return { score, label: 'Слабый', color: 'bg-red-500' };
-    if (score <= 3) return { score, label: 'Средний', color: 'bg-yellow-500' };
-    if (score <= 4) return { score, label: 'Хороший', color: 'bg-blue-500' };
-    return { score, label: 'Отличный', color: 'bg-green-500' };
+    if (score <= 2) return { score, label: 'Weak', color: 'bg-red-500' };
+    if (score <= 3) return { score, label: 'Medium', color: 'bg-yellow-500' };
+    if (score <= 4) return { score, label: 'Good', color: 'bg-blue-500' };
+    return { score, label: 'Excellent', color: 'bg-green-500' };
   };
 
   const strength = getPasswordStrength(password);
@@ -35,7 +35,7 @@ export default function PasswordField({ password, onPasswordChange, placeholder 
       <CardHeader className="pb-4">
         <CardTitle className="text-cyan-300 flex items-center gap-2">
           <Shield className="w-5 h-5" />
-          Защита паролем
+          Password Protection
         </CardTitle>
       </CardHeader>
       
@@ -61,7 +61,7 @@ export default function PasswordField({ password, onPasswordChange, placeholder 
         {password && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Сила пароля</span>
+              <span className="text-sm text-slate-300">Password Strength</span>
               <Badge 
                 variant="outline" 
                 className={`${strength.color} text-white border-0`}
@@ -80,25 +80,25 @@ export default function PasswordField({ password, onPasswordChange, placeholder 
                 <span className={password.length >= 8 ? 'text-green-400' : 'text-red-400'}>
                   {password.length >= 8 ? '✓' : '✗'}
                 </span>
-                Минимум 8 символов
+                Minimum 8 characters
               </div>
               <div className="flex items-center gap-2">
                 <span className={/[A-Z]/.test(password) ? 'text-green-400' : 'text-red-400'}>
                   {/[A-Z]/.test(password) ? '✓' : '✗'}
                 </span>
-                Заглавные буквы
+                Uppercase letters
               </div>
               <div className="flex items-center gap-2">
                 <span className={/\d/.test(password) ? 'text-green-400' : 'text-red-400'}>
                   {/\d/.test(password) ? '✓' : '✗'}
                 </span>
-                Цифры
+                Numbers
               </div>
               <div className="flex items-center gap-2">
                 <span className={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? 'text-green-400' : 'text-red-400'}>
                   {/[!@#$%^&*(),.?":{}|<>]/.test(password) ? '✓' : '✗'}
                 </span>
-                Спецсимволы
+                Special characters
               </div>
             </div>
           </div>

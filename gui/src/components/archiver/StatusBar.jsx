@@ -49,7 +49,7 @@ export default function StatusBar({ logs, archives }) {
         <CardHeader className="pb-4">
           <CardTitle className="text-cyan-300 flex items-center gap-2">
             <Database className="w-5 h-5" />
-            Статистика
+            Statistics
           </CardTitle>
         </CardHeader>
         
@@ -61,7 +61,7 @@ export default function StatusBar({ logs, archives }) {
                 <div className="text-sm font-medium text-slate-200">
                   {archives.length}
                 </div>
-                <div className="text-xs text-slate-500">Архивов</div>
+                <div className="text-xs text-slate-500">Archives</div>
               </div>
             </div>
             
@@ -71,14 +71,14 @@ export default function StatusBar({ logs, archives }) {
                 <div className="text-sm font-medium text-slate-200">
                   {formatSize(totalSize)}
                 </div>
-                <div className="text-xs text-slate-500">Общий размер</div>
+                <div className="text-xs text-slate-500">Total Size</div>
               </div>
             </div>
           </div>
 
           {/* Recent Archives */}
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-slate-300">Последние архивы</h4>
+            <h4 className="text-sm font-medium text-slate-300">Recent Archives</h4>
             <div className="max-h-32 overflow-y-auto space-y-1">
               {archives.slice(0, 5).map((archive, index) => (
                 <div key={index} className="flex items-center gap-2 p-2 rounded bg-slate-700/20">
@@ -101,7 +101,7 @@ export default function StatusBar({ logs, archives }) {
         <CardHeader className="pb-4">
           <CardTitle className="text-cyan-300 flex items-center gap-2">
             <Activity className="w-5 h-5" />
-            Журнал активности
+            Activity Log
           </CardTitle>
         </CardHeader>
         
@@ -131,7 +131,7 @@ export default function StatusBar({ logs, archives }) {
             {logs.length === 0 && (
               <div className="text-center text-slate-500 py-8">
                 <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Журнал активности пуст</p>
+                <p className="text-sm">Activity log is empty</p>
               </div>
             )}
           </div>

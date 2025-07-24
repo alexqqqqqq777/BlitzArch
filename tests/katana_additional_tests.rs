@@ -60,6 +60,7 @@ fn katana_unicode_password_roundtrip() {
         out.path(),
         &[],
         Some(password.to_string()),
+        None, // strip_components
     )
     .expect("extract");
 
@@ -89,6 +90,6 @@ fn katana_corrupted_shard_detection() {
     file.sync_all().unwrap();
 
     let out = tempdir().unwrap();
-    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None);
+    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None, None);
     assert!(res.is_err(), "Extraction should fail on corrupted archive");
 }

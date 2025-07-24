@@ -13,7 +13,7 @@ export default function ProcessingPanel({ progress, speed, type }) {
       case 'create':
         return {
           icon: Upload,
-          title: 'Создание архива',
+          title: 'Creating Archive',
           gradient: 'from-emerald-500 to-teal-500',
           bgGradient: 'from-emerald-500/20 to-teal-500/20',
           textColor: 'text-emerald-400'
@@ -21,7 +21,7 @@ export default function ProcessingPanel({ progress, speed, type }) {
       case 'extract':
         return {
           icon: Download,
-          title: 'Извлечение файлов',
+          title: 'Extracting Files',
           gradient: 'from-violet-500 to-purple-500',
           bgGradient: 'from-violet-500/20 to-purple-500/20',
           textColor: 'text-violet-400'
@@ -29,7 +29,7 @@ export default function ProcessingPanel({ progress, speed, type }) {
       default:
         return {
           icon: Activity,
-          title: 'Обработка',
+          title: 'Processing',
           gradient: 'from-slate-500 to-slate-600',
           bgGradient: 'from-slate-500/20 to-slate-600/20',
           textColor: 'text-slate-400'
@@ -60,14 +60,14 @@ export default function ProcessingPanel({ progress, speed, type }) {
           )}
         </motion.div>
         <h3 className="text-lg font-semibold text-white">
-          {isCompleted ? 'Завершено!' : typeInfo.title}
+          {isCompleted ? 'Completed!' : typeInfo.title}
         </h3>
       </div>
 
       {/* Progress Bar */}
       <div className="space-y-3 mb-6">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-300">Прогресс</span>
+          <span className="text-sm text-slate-300">Progress</span>
           <Badge className={`bg-gradient-to-r ${typeInfo.bgGradient} ${typeInfo.textColor} border-0`}>
             {progress.toFixed(1)}%
           </Badge>
@@ -96,7 +96,7 @@ export default function ProcessingPanel({ progress, speed, type }) {
             <div className="text-sm font-medium text-white">
               {speed.toFixed(1)} MB/s
             </div>
-            <div className="text-xs text-slate-400">Скорость</div>
+            <div className="text-xs text-slate-400">Speed</div>
           </div>
         </div>
         
@@ -106,7 +106,7 @@ export default function ProcessingPanel({ progress, speed, type }) {
             <div className="text-sm font-medium text-white">
               {isCompleted ? '0s' : `${estimatedTime}s`}
             </div>
-            <div className="text-xs text-slate-400">Осталось</div>
+            <div className="text-xs text-slate-400">Remaining</div>
           </div>
         </div>
       </div>
@@ -120,10 +120,10 @@ export default function ProcessingPanel({ progress, speed, type }) {
         >
           <div className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-emerald-400' : `bg-gradient-to-r ${typeInfo.gradient}`}`} />
           {isCompleted 
-            ? 'Операция завершена успешно'
+            ? 'Operation completed successfully'
             : type === 'create' 
-            ? 'Сжатие и упаковка файлов...'
-            : 'Распаковка и проверка целостности...'
+            ? 'Compressing and packing files...'
+            : 'Unpacking and integrity verification...'
           }
         </motion.div>
       </div>

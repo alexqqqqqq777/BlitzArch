@@ -61,6 +61,7 @@ fn katana_roundtrip_encrypted() {
         out_dir.path(),
         &[],
         Some(password.to_string()),
+        None, // strip_components
     )
     .expect("extraction failed");
 
@@ -91,6 +92,7 @@ fn katana_wrong_password() {
         out_dir.path(),
         &[],
         Some("wrong_pass".to_string()),
+        None, // strip_components
     );
 
     assert!(result.is_err(), "Extraction should fail with wrong password");

@@ -42,7 +42,7 @@ export default function WorkspaceDropZone({
   const [isProcessing, setIsProcessing] = useState(false);
   const scheme = COLOR_SCHEMES[color];
 
-  // Tauri drag & drop события для получения реальных путей
+  // Tauri drag & drop events for getting real paths
   useEffect(() => {
     console.log('🔧 Setting up Tauri drag & drop listeners');
     
@@ -52,7 +52,7 @@ export default function WorkspaceDropZone({
       try {
         const { listen } = await import('@tauri-apps/api/event');
         
-        // Слушаем Tauri drag & drop события
+        // Listen to Tauri drag & drop events
         unlisten = await listen('tauri://drag-drop', (event) => {
           console.log('🏗️ TAURI DRAG DROP EVENT:', event.payload);
           
@@ -60,11 +60,11 @@ export default function WorkspaceDropZone({
             const filePaths = event.payload.paths;
             console.log('📁 Real file paths from Tauri:', filePaths);
             
-            // Фильтруем файлы по типу (архивы или обычные файлы)
+            // Filter files by type (archives or regular files)
             let filteredPaths = filePaths;
             
             if (acceptArchives) {
-              // Для explorer - только архивы
+              // For explorer - only archives
               const archiveExtensions = ['.blz', '.zip', '.rar', '.7z', '.tar', '.gz'];
               filteredPaths = filePaths.filter(path => 
                 archiveExtensions.some(ext => path.toLowerCase().endsWith(ext))
@@ -77,11 +77,11 @@ export default function WorkspaceDropZone({
               return;
             }
             
-            // Создаем объекты файлов с реальными путями
+            // Create file objects with real paths
             const filesWithPaths = filteredPaths.map(path => ({
               name: path.split('/').pop() || path.split('\\').pop(),
               path: path,
-              size: 0 // Размер неизвестен
+              size: 0 // Size unknown
             }));
             
             console.log('✅ Files with real paths:', filesWithPaths);
@@ -94,7 +94,7 @@ export default function WorkspaceDropZone({
         console.warn('⚠️ Tauri drag & drop not available:', error);
         console.log('🌐 Falling back to standard drag & drop');
         
-        // Fallback к стандартным событиям
+        // Fallback to standard events
         const handleGlobalDragOver = (e) => {
           console.log('🌍 FALLBACK DRAG OVER');
           e.preventDefault();
@@ -124,7 +124,7 @@ export default function WorkspaceDropZone({
     };
   }, [onFilesSelected]);
 
-  // Упрощенные обработчики drag-and-drop с отладкой
+  // Simplified drag-and-drop handlers with debugging
   const handleDragEnter = useCallback((e) => {
     console.log('🎯 COMPONENT DRAG ENTER!');
     e.preventDefault();
@@ -157,7 +157,7 @@ export default function WorkspaceDropZone({
     console.log('📋 DataTransfer:', e.dataTransfer);
     console.log('📋 DataTransfer.files:', e.dataTransfer.files);
     
-    // Обрабатываем перетащенные файлы
+    // Process dragged files
     const files = Array.from(e.dataTransfer.files);
     console.log('📁 Files array:', files);
     console.log('📁 Files length:', files.length);
@@ -165,13 +165,13 @@ export default function WorkspaceDropZone({
     if (files.length > 0) {
       console.log('✅ Processing dropped files:', files.map(f => f.name));
       
-      // Простая передача файлов без сложной логики
+      // Simple file transfer without complex logic
       console.log('📁 Calling onFilesSelected with files:', files);
       onFilesSelected(files);
     } else {
       console.log('❌ No files found in drop event');
       
-      // Попробуем альтернативные способы получения файлов
+      // Try alternative ways to get files
       const items = Array.from(e.dataTransfer.items);
       console.log('📋 DataTransfer.items:', items);
       

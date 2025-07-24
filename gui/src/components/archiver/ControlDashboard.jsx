@@ -31,7 +31,7 @@ const COMPRESSION_PROFILES = {
   },
   high: { 
     name: 'Balanced', 
-    level: 3,                   // Сбалансированный уровень
+    level: 3,                   // Balanced level
     icon: Sparkles, 
     color: 'from-purple-400 to-pink-500',
     desc: 'Balanced compression',
@@ -43,7 +43,7 @@ const COMPRESSION_PROFILES = {
   },
   maximum: { 
     name: 'Maximum', 
-    level: 7,                   // Максимальное сжатие
+    level: 7,                   // Maximum compression
     icon: Zap, 
     color: 'from-yellow-400 to-orange-500',
     desc: 'Best compression, slower speed',
@@ -55,7 +55,7 @@ const COMPRESSION_PROFILES = {
   },
   secure: { 
     name: 'Secure', 
-    level: 3,                   // Парольный режим
+    level: 3,                   // Password mode
     icon: Shield, 
     color: 'from-red-400 to-rose-500',
     desc: 'AES-256 encrypted archive',
@@ -91,7 +91,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
   };
 
   const currentProfile = COMPRESSION_PROFILES[settings.preset] || COMPRESSION_PROFILES.balanced;
-  // Определяем, были ли внесены ручные изменения поверх профиля
+  // Determine if manual changes were made on top of profile
   const isModified = (
     settings.compressionLevel !== currentProfile.level ||
     settings.bundleSize !== currentProfile.bundleSize ||
@@ -185,7 +185,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
           {/* Memory Budget Control */}
           <div>
             <label className="text-xs text-neutral-400 mb-2 block">
-              Использование памяти: {settings.memoryBudget === 0 ? 'Автоматически' : `${settings.memoryBudget}% RAM`}
+              Memory Usage: {settings.memoryBudget === 0 ? 'Automatic' : `${settings.memoryBudget}% RAM`}
             </label>
             <Slider
               value={[settings.memoryBudget]}
@@ -197,7 +197,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
               className="mb-2"
             />
             <div className="flex justify-between text-[10px] text-neutral-500">
-              <span>Авто</span>
+              <span>Auto</span>
               <span>50%</span>
               <span>100%</span>
             </div>
@@ -308,7 +308,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
             <div>Compression: Level {settings.compressionLevel}</div>
             <div>Security: {settings.useEncryption ? 'AES-256 Encrypted' : 'Unencrypted'}</div>
             <div>Threads: {settings.threads || 'Auto'} CPU, {settings.codecThreads || 'Auto'} Codec</div>
-            <div>Память: {settings.memoryBudget === 0 ? 'Автоматически' : `${settings.memoryBudget}% RAM`}</div>
+            <div>Memory: {settings.memoryBudget === 0 ? 'Automatic' : `${settings.memoryBudget}% RAM`}</div>
           </div>
         </div>
       </CardContent>

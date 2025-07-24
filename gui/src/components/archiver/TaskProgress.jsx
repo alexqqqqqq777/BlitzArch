@@ -23,7 +23,7 @@ export default function TaskProgress({
   const taskType = isCreating ? 'create' : 'extract';
   const taskIcon = isCreating ? Upload : Download;
   const taskColor = isCreating ? '#00FFFF' : '#FFD700';
-  const taskName = isCreating ? 'Создание архива' : 'Извлечение файлов';
+  const taskName = isCreating ? 'Creating Archive' : 'Extracting Files';
   const isCompleted = progress >= 100;
   const isActive = progress > 0 && progress < 100;
 
@@ -54,7 +54,7 @@ export default function TaskProgress({
         {/* Main Progress Bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-300">Прогресс</span>
+            <span className="text-sm text-slate-300">Progress</span>
             <Badge 
               variant="outline" 
               className="border-slate-600 text-slate-300"
@@ -92,7 +92,7 @@ export default function TaskProgress({
               <div className="text-sm font-medium text-slate-200">
                 {speed.toFixed(1)} MB/s
               </div>
-              <div className="text-xs text-slate-500">Скорость</div>
+              <div className="text-xs text-slate-500">Speed</div>
             </div>
           </div>
           
@@ -112,7 +112,7 @@ export default function TaskProgress({
               <div className="text-sm font-medium text-slate-200">
                 {totalFiles > 0 ? `${processedFiles}/${totalFiles}` : '0'}
               </div>
-              <div className="text-xs text-slate-500">Файлы</div>
+              <div className="text-xs text-slate-500">Files</div>
             </div>
           </div>
           
@@ -122,7 +122,7 @@ export default function TaskProgress({
               <div className="text-sm font-medium text-slate-200">
                 {(processedBytes / (1024 * 1024)).toFixed(1)}MB
               </div>
-              <div className="text-xs text-slate-500">Обработано</div>
+              <div className="text-xs text-slate-500">Processed</div>
             </div>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function TaskProgress({
             <div className="text-sm font-medium text-slate-200">
               {elapsedTime.toFixed(1)}s
             </div>
-            <div className="text-xs text-slate-500">Время</div>
+            <div className="text-xs text-slate-500">Time</div>
           </div>
           
           {totalShards > 0 && (
@@ -141,7 +141,7 @@ export default function TaskProgress({
               <div className="text-sm font-medium text-slate-200">
                 {completedShards}/{totalShards}
               </div>
-              <div className="text-xs text-slate-500">Шарды</div>
+              <div className="text-xs text-slate-500">Shards</div>
             </div>
           )}
           
@@ -150,7 +150,7 @@ export default function TaskProgress({
               <div className="text-sm font-medium text-green-400">
                 {compressionRatio.toFixed(1)}x
               </div>
-              <div className="text-xs text-slate-500">Сжатие</div>
+              <div className="text-xs text-slate-500">Compression</div>
             </div>
           )}
         </div>
@@ -164,7 +164,7 @@ export default function TaskProgress({
               transition={{ duration: 1.5, repeat: Infinity }}
             >
               <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
-              {isCreating ? 'Сжатие файлов...' : 'Распаковка архива...'}
+              {isCreating ? 'Compressing files...' : 'Extracting archive...'}
             </motion.div>
           )}
           
@@ -175,7 +175,7 @@ export default function TaskProgress({
               className="flex items-center gap-2 text-sm text-green-400"
             >
               <div className="w-2 h-2 rounded-full bg-green-400"></div>
-              Проверка целостности данных
+              Data integrity check
             </motion.div>
           )}
         </div>

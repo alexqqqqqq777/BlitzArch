@@ -79,6 +79,32 @@ impl ArchiveReader {
     }
 }
 
+/// Strips leading path components from a path, similar to tar --strip-components.
+/// 
+/// Returns the original path if stripping would result in an empty path.
+/// This ensures we never create invalid extraction paths.
+pub(crate) fn strip_path_components(path: &Path, components: u32) -> PathBuf {
+    if components == 0 {
+        return path.to_path_buf();
+    }
+    
+    let mut path_components = path.components();
+    for _ in 0..components {
+        if path_components.next().is_none() {
+            // Not enough components to strip, return original path
+            return path.to_path_buf();
+        }
+    }
+    
+    let stripped: PathBuf = path_components.collect();
+    if stripped == Path::new("") {
+        // Stripping resulted in empty path, return original
+        path.to_path_buf()
+    } else {
+        stripped
+    }
+}
+
 /// Lists the contents of an archive to standard output.
 ///
 /// # Arguments
@@ -131,11 +157,13 @@ pub fn list_files(file: File) -> Result<(), Box<dyn Error>> {
 /// * `files_to_extract` - A slice of specific file paths to extract. If empty, all files are extracted.
 /// * `password` - An optional password for decrypting the archive.
 /// * `output_dir` - The directory to extract files to. Defaults to the current working directory.
+/// * `strip_components` - Number of leading path components to strip (like tar --strip-components).
 pub fn extract_files(
     archive_path: &Path,
     files_to_extract: &[PathBuf],
     password: Option<&str>,
     output_dir: Option<&Path>,
+    strip_components: Option<u32>,
 ) -> Result<(), Box<dyn Error>> {
         // Detect and delegate to Katana extractor if needed
     if crate::katana::is_katana_archive(archive_path)? {
@@ -148,6 +176,7 @@ pub fn extract_files(
             &base_output_path,
             files_to_extract,
             password.map(|s| s.to_string()),
+            strip_components,
         );
     }
 
@@ -159,6 +188,11 @@ pub fn extract_files(
     if salt.is_some() && password.is_none() {
         return Err("Archive is encrypted, but no password was provided.".into());
     }
+    // Вычисляем Argon2-ключ один раз, чтобы избежать повторной деривации для каждого бандла
+    let key_bytes_opt: Option<[u8; 32]> = match (salt, password) {
+        (Some(s), Some(pw)) => Some(crypto::derive_key_argon2(pw, s)),
+        _ => None,
+    };
 
     let base_output_path = match output_dir {
         Some(path) => path.to_path_buf(),
@@ -171,7 +205,11 @@ pub fn extract_files(
 
     for entry in &index.entries {
         if entry.is_dir {
-            let target_path = base_output_path.join(&entry.path);
+            let stripped_path = strip_components.map_or_else(
+                || entry.path.clone(),
+                |n| strip_path_components(&entry.path, n)
+            );
+            let target_path = base_output_path.join(stripped_path);
             fs::create_dir_all(&target_path)?;
             #[cfg(unix)]
             {
@@ -225,6 +263,7 @@ pub fn extract_files(
                     &files,
                     &index,
                     &base_output_path,
+                    strip_components,
                 )?;
             }
             return Ok(());
@@ -244,6 +283,7 @@ pub fn extract_files(
                 files,
                 &index_arc,
                 &base_out,
+                strip_components,
             )
         })?;
 
@@ -257,9 +297,14 @@ pub fn extract_files(
         files: &[crate::archive::FileIndexEntry],
         base_output_path: &Path,
         algo: &str,
+        strip_components: Option<u32>,
     ) -> io::Result<()> {
         for file_entry in files {
-            let target_path = base_output_path.join(&file_entry.path);
+            let stripped_path = strip_components.map_or_else(
+                || file_entry.path.clone(),
+                |n| strip_path_components(&file_entry.path, n)
+            );
+            let target_path = base_output_path.join(stripped_path);
             if let Some(parent) = target_path.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -306,12 +351,12 @@ pub fn extract_files(
         let bundle_info = &index.bundles[bundle_id as usize];
         reader.file.seek(SeekFrom::Start(bundle_info.offset))?;
 
-        if let (Some(s), Some(nonce), Some(pass)) = (salt, &bundle_info.nonce, password) {
+        if let (Some(key_bytes), Some(nonce)) = (key_bytes_opt.as_ref(), &bundle_info.nonce) {
             // ENCRYPTED: Read the full bundle into memory for decryption.
             let mut raw_bundle_data = vec![0; bundle_info.compressed_size as usize];
             reader.file.read_exact(&mut raw_bundle_data)?;
 
-            let compressed_data = crypto::decrypt(&raw_bundle_data, pass, s, nonce)
+            let compressed_data = crypto::decrypt_prekey(&raw_bundle_data, key_bytes, nonce)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Decryption failed. Invalid password?"))?;
             
             let compressed_data_reader = std::io::BufReader::new(&compressed_data[..]);
@@ -326,7 +371,7 @@ pub fn extract_files(
                      }
                  }
              };
-            extract_from_decoder(&mut decoder, &files, &base_output_path, &bundle_info.algo)?;
+            extract_from_decoder(&mut decoder, &files, &base_output_path, &bundle_info.algo, strip_components)?;
         } else if salt.is_some() {
             return Err("Inconsistent encryption metadata: archive is encrypted, but bundle is not.".into());
         } else {
@@ -344,7 +389,7 @@ pub fn extract_files(
                      }
                  }
              };
-            extract_from_decoder(&mut decoder, &files, &base_output_path, &bundle_info.algo)?;
+            extract_from_decoder(&mut decoder, &files, &base_output_path, &bundle_info.algo, strip_components)?;
         }
     }
 

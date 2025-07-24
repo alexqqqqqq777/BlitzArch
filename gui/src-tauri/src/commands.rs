@@ -24,11 +24,23 @@ use blitzarch::katana::{create_katana_archive_with_progress, extract_katana_arch
 use blitzarch::progress::ProgressState;
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ArchiveStats {
+    pub files: Option<u64>,
+    pub time_sec: Option<f64>,
+    pub ratio: Option<f64>,
+    pub speed_mb_s: Option<f64>,
+    pub total_bytes: Option<u64>,
+    pub archive_bytes: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArchiveResult {
     pub success: bool,
     pub output: Option<String>,
     pub error: Option<String>,
     pub archive_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats: Option<ArchiveStats>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -178,6 +190,10 @@ fn create_archive_with_real_progress(
     let input_paths: Vec<std::path::PathBuf> = inputs.iter().map(|s| std::path::PathBuf::from(s)).collect();
     let output_pathbuf = std::path::PathBuf::from(&output_path);
     
+    // Store last progress state for final stats
+    let last_progress_state = std::sync::Arc::new(std::sync::Mutex::new(None::<ProgressState>));
+    let last_progress_clone = last_progress_state.clone();
+    
     // Create progress callback
     let app_for_progress = app.clone();
     let progress_callback = move |state: ProgressState| {
@@ -226,12 +242,57 @@ let result = create_katana_archive_with_progress(
         Ok(()) => {
             let elapsed = start_time.elapsed();
             
-            // Calculate final metrics
+            // Calculate final metrics with recursive directory traversal
             let archive_size = std::fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
-            let total_input_size: u64 = input_paths.iter()
-                .filter_map(|p| std::fs::metadata(p).ok())
-                .map(|m| m.len())
-                .sum();
+            
+            // Recursively calculate total size and file count
+            let (total_input_size, actual_file_count) = calculate_recursive_stats(&input_paths);
+            
+            fn calculate_recursive_stats(paths: &[std::path::PathBuf]) -> (u64, u64) {
+                let mut total_size = 0u64;
+                let mut file_count = 0u64;
+                
+                for path in paths {
+                    if let Ok(metadata) = std::fs::metadata(path) {
+                        if metadata.is_file() {
+                            total_size += metadata.len();
+                            file_count += 1;
+                        } else if metadata.is_dir() {
+                            if let Some(path_str) = path.to_str() {
+                                let (dir_size, dir_files) = calculate_dir_stats(path_str);
+                                total_size += dir_size;
+                                file_count += dir_files;
+                            }
+                        }
+                    }
+                }
+                
+                (total_size, file_count)
+            }
+            
+            fn calculate_dir_stats(dir_path: &str) -> (u64, u64) {
+                let mut total_size = 0u64;
+                let mut file_count = 0u64;
+                
+                if let Ok(entries) = std::fs::read_dir(dir_path) {
+                    for entry in entries.flatten() {
+                        if let Ok(metadata) = entry.metadata() {
+                            if metadata.is_file() {
+                                total_size += metadata.len();
+                                file_count += 1;
+                            } else if metadata.is_dir() {
+                                if let Some(path_str) = entry.path().to_str() {
+                                    let (sub_size, sub_files) = calculate_dir_stats(path_str);
+                                    total_size += sub_size;
+                                    file_count += sub_files;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                (total_size, file_count)
+            }
             
             let compression_ratio = if archive_size > 0 {
                 Some(total_input_size as f32 / archive_size as f32)
@@ -249,9 +310,13 @@ let result = create_katana_archive_with_progress(
                 completed: true,
                 error: None,
                 
-                // Final metrics
-                processed_files: input_paths.len() as u64, // Approximation
-                total_files: input_paths.len() as u64,
+                // Final metrics from last progress state if available
+                processed_files: if let Ok(last_state) = last_progress_state.lock() {
+                    last_state.as_ref().map(|s| s.processed_files).unwrap_or(actual_file_count)
+                } else { actual_file_count },
+                total_files: if let Ok(last_state) = last_progress_state.lock() {
+                    last_state.as_ref().map(|s| s.total_files).unwrap_or(actual_file_count)
+                } else { actual_file_count },
                 processed_bytes: total_input_size,
                 total_bytes: total_input_size,
                 completed_shards: 1, // Approximation
@@ -262,11 +327,24 @@ let result = create_katana_archive_with_progress(
             };
             app.emit("archive-progress", &final_progress).ok();
             
+            // Use the actual file count calculated recursively
+            let final_stats = ArchiveStats {
+                files: Some(actual_file_count),
+                time_sec: Some(elapsed.as_secs_f64()),
+                ratio: compression_ratio.map(|r| r as f64),
+                speed_mb_s: if elapsed.as_secs_f64() > 0.0 {
+                    Some((total_input_size as f64 / 1_048_576.0) / elapsed.as_secs_f64())
+                } else { None },
+                total_bytes: Some(total_input_size),
+                archive_bytes: Some(archive_size),
+            };
+
             Ok(ArchiveResult {
                 success: true,
                 output: Some(format!("Archive created successfully: {}", output_path)),
                 error: None,
-                archive_path: Some(output_path),
+                archive_path: Some(output_path.clone()),
+                stats: Some(final_stats),
             })
         }
         Err(e) => {
@@ -297,6 +375,7 @@ let result = create_katana_archive_with_progress(
                 output: None,
                 error: Some(error_msg),
                 archive_path: None,
+                stats: None,
             })
         }
     }
@@ -364,6 +443,7 @@ let archive_path = archive_pathbuf.to_string_lossy().to_string();
                     output: Some(stdout.to_string()),
                     error: None,
                     archive_path: Some(archive_path),
+                    stats: None,
                 })
             } else {
                 println!("❌ Archive creation failed: {}", stderr);
@@ -372,6 +452,7 @@ let archive_path = archive_pathbuf.to_string_lossy().to_string();
                     output: None,
                     error: Some(stderr.to_string()),
                     archive_path: None,
+                    stats: None,
                 })
             }
         }
@@ -509,7 +590,11 @@ fn extract_archive_with_real_progress(
         }
     };
 
+    // Store empty status before move
+    let is_full_extraction = expanded_files.is_empty();
+    
     let selected: Vec<std::path::PathBuf> = expanded_files
+        .clone()
         .into_iter()
         .map(|s| std::path::PathBuf::from(s))
         .collect();
@@ -564,19 +649,51 @@ fn extract_archive_with_real_progress(
     match result {
         Ok(()) => {
             let elapsed = start_time.elapsed();
+            
+            // Calculate extracted files count and size
+            let (extracted_bytes, extracted_files_count) = if is_full_extraction {
+                // Full extraction - calculate from archive contents
+                match read_archive_index(&archive_path, password.clone()) {
+                    Ok(entries) => {
+                        let files: Vec<_> = entries.iter().filter(|e| !e.is_dir).collect();
+                        let total_size: u64 = files.iter().map(|e| e.size).sum();
+                        (total_size, files.len() as u64)
+                    }
+                    Err(_) => (0, 1) // Fallback
+                }
+            } else {
+                // Partial extraction - calculate from selected files
+                match read_archive_index(&archive_path, password.clone()) {
+                    Ok(entries) => {
+                        let mut total_size = 0u64;
+                        let mut file_count = 0u64;
+                        for spec in &expanded_files {
+                            if let Some(entry) = entries.iter().find(|e| e.path == *spec && !e.is_dir) {
+                                total_size += entry.size;
+                                file_count += 1;
+                            }
+                        }
+                        (total_size, file_count)
+                    }
+                    Err(_) => (0, expanded_files.len() as u64) // Fallback
+                }
+            };
+            
             let final_progress = ProgressEvent {
                 operation: "extract".to_string(),
                 progress: 100.0,
-                speed: 0.0,
+                speed: if elapsed.as_secs_f32() > 0.0 {
+                    (extracted_bytes as f32 / (1024.0 * 1024.0)) / elapsed.as_secs_f32()
+                } else { 0.0 },
                 message: format!("Extraction completed successfully in {:.1}s", elapsed.as_secs_f32()),
                 completed: true,
                 error: None,
                 
-                // Final metrics
-                processed_files: 1, // Approximation
-                total_files: 1,
-                processed_bytes: 0,
-                total_bytes: 0,
+                // Real final metrics
+                processed_files: extracted_files_count,
+                total_files: extracted_files_count,
+                processed_bytes: extracted_bytes,
+                total_bytes: extracted_bytes,
                 completed_shards: 1,
                 total_shards: 1,
                 elapsed_time: elapsed.as_secs_f32(),
@@ -585,11 +702,24 @@ fn extract_archive_with_real_progress(
             };
             app.emit("archive-progress", &final_progress).ok();
             
+            // Create proper extraction stats
+            let final_stats = ArchiveStats {
+                files: Some(extracted_files_count),
+                time_sec: Some(elapsed.as_secs_f64()),
+                ratio: None, // N/A for extraction
+                speed_mb_s: if elapsed.as_secs_f64() > 0.0 {
+                    Some((extracted_bytes as f64 / 1_048_576.0) / elapsed.as_secs_f64())
+                } else { None },
+                total_bytes: Some(extracted_bytes),
+                archive_bytes: None, // N/A for extraction
+            };
+            
             Ok(ArchiveResult {
                 success: true,
                 output: Some(format!("Archive extracted successfully: {}", output_dir)),
                 error: None,
                 archive_path: Some(archive_path),
+                stats: Some(final_stats),
             })
         }
         Err(e) => {
@@ -620,6 +750,7 @@ fn extract_archive_with_real_progress(
                 output: None,
                 error: Some(error_msg),
                 archive_path: None,
+                stats: None,
             })
         }
     }
@@ -672,6 +803,7 @@ pub fn extract_archive(
                     output: Some(stdout.to_string()),
                     error: None,
                     archive_path: None,
+                stats: None,
                 })
             } else {
                 println!("❌ Archive extraction failed: {}", stderr);
@@ -680,6 +812,7 @@ pub fn extract_archive(
                     output: None,
                     error: Some(stderr.to_string()),
                     archive_path: None,
+                stats: None,
                 })
             }
         }
@@ -715,6 +848,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
                     output: Some(stdout.to_string()),
                     error: None,
                     archive_path: None,
+                stats: None,
                 })
             } else {
                 println!("❌ Archive listing failed: {}", stderr);
@@ -723,6 +857,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
                     output: None,
                     error: Some(stderr.to_string()),
                     archive_path: None,
+                stats: None,
                 })
             }
         }
@@ -753,6 +888,7 @@ pub async fn drag_out_extract(
             output: None,
             error: Some(format!("Failed to create target directory: {}", e)),
             archive_path: None,
+                stats: None,
         });
     }
     
@@ -791,6 +927,7 @@ let extracted_file_path = unique_dest.to_string_lossy().to_string();
                 output: None,
                 error: Some(e),
                 archive_path: None,
+                stats: None,
             })
         }
     }
@@ -800,8 +937,8 @@ let extracted_file_path = unique_dest.to_string_lossy().to_string();
 #[tauri::command]
 pub fn create_link_file(path: String, contents: String) -> Result<ArchiveResult, String> {
     match fs::write(&path, contents) {
-        Ok(_) => Ok(ArchiveResult { success: true, output: Some(path.clone()), error: None, archive_path: Some(path) }),
-        Err(e) => Ok(ArchiveResult { success: false, output: None, error: Some(e.to_string()), archive_path: None }),
+        Ok(_) => Ok(ArchiveResult { success: true, output: Some(path.clone()), error: None, archive_path: Some(path), stats: None }),
+        Err(e) => Ok(ArchiveResult { success: false, output: None, error: Some(e.to_string()), archive_path: None, stats: None }),
     }
 }
 
@@ -817,6 +954,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             output: Some("Temp directory does not exist. Nothing to clean.".to_string()),
             error: None,
             archive_path: None,
+                stats: None,
         });
     }
 
@@ -859,6 +997,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
                 output: None,
                 error: Some(format!("Failed to read dir: {}", e)),
                 archive_path: None,
+                stats: None,
             });
         }
     }
@@ -869,6 +1008,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             output: Some(format!("Removed {} old items", removed)),
             error: None,
             archive_path: None,
+                stats: None,
         })
     } else {
         Ok(ArchiveResult {
@@ -876,6 +1016,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             output: Some(format!("Removed {} old items", removed)),
             error: Some(errors.join("; ")),
             archive_path: None,
+                stats: None,
         })
     }
 }
@@ -893,6 +1034,7 @@ pub fn delete_file(file_path: String) -> Result<ArchiveResult, String> {
                 output: Some(format!("File deleted: {}", file_path)),
                 error: None,
                 archive_path: None,
+                stats: None,
             })
         }
         Err(e) => {
@@ -902,6 +1044,7 @@ pub fn delete_file(file_path: String) -> Result<ArchiveResult, String> {
                 output: None,
                 error: Some(e.to_string()),
                 archive_path: None,
+                stats: None,
             })
         }
     }

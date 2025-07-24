@@ -15,10 +15,10 @@ export default function SpeedMeter({ speed, isActive, type }) {
   };
 
   const getSpeedLevel = () => {
-    if (speed < 30) return 'Медленно';
-    if (speed < 60) return 'Нормально';
-    if (speed < 100) return 'Быстро';
-    return 'Очень быстро';
+    if (speed < 30) return 'Slow';
+    if (speed < 60) return 'Normal';
+    if (speed < 100) return 'Fast';
+    return 'Very Fast';
   };
 
   const speedColor = getSpeedColor();
@@ -28,7 +28,7 @@ export default function SpeedMeter({ speed, isActive, type }) {
       <div className="flex items-center gap-3 mb-6">
         <Gauge className="w-5 h-5 text-slate-400" />
         <h3 className="text-lg font-semibold text-white">
-          {type === 'create' ? 'Скорость создания' : type === 'extract' ? 'Скорость извлечения' : 'Скорость обработки'}
+          {type === 'create' ? 'Creation Speed' : type === 'extract' ? 'Extraction Speed' : 'Processing Speed'}
         </h3>
       </div>
 
@@ -99,12 +99,12 @@ export default function SpeedMeter({ speed, isActive, type }) {
               >
                 <Zap className="w-4 h-4" />
               </motion.div>
-              Активно
+              Active
             </>
           ) : (
             <>
               <TrendingUp className="w-4 h-4" />
-              Готов
+              Ready
             </>
           )}
         </div>

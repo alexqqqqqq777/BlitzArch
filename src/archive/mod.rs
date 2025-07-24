@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::borrow::Cow;
 use tempfile::NamedTempFile;
 use crate::compress::CompressionAlgo;
 
@@ -102,6 +103,7 @@ pub struct ArchiveWriter {
     compression_algo: String,
     writer: BufWriter<File>,
     password: Option<String>,
+    key_bytes: Option<[u8; 32]>,
     index: ArchiveIndex,
     header_bytes: Vec<u8>,
     current_offset: u64,
@@ -133,11 +135,16 @@ impl ArchiveWriter {
             CompressionAlgo::Store => "store".into(),
         };
         let salt = if password.is_some() { Some(generate_salt()) } else { None };
-        let header = ArchiveHeader {
+    // Pre-derive encryption key once if password provided
+    let key_bytes_opt: Option<[u8; 32]> = if let (Some(ref pass), Some(ref salt_bytes)) = (password.as_ref(), salt.as_ref()) {
+        Some(crypto::derive_key_argon2(pass, &salt_bytes[..]))
+    } else { None };
+
+    let header = ArchiveHeader {
             version: 1,
             creation_timestamp: chrono::Utc::now().timestamp(),
             file_count: 0,
-            salt,
+            salt: salt.clone(),
         };
 
         let header_bytes = serde_json::to_vec(&header)?;
@@ -148,6 +155,7 @@ impl ArchiveWriter {
         Ok(Self {
             writer,
             password,
+            key_bytes: key_bytes_opt,
             compression_algo: algo_str.clone(),
             index: ArchiveIndex {
                 compression_algo: algo_str,
@@ -206,13 +214,19 @@ impl ArchiveWriter {
 
         temp_file.seek(SeekFrom::Start(0))?;
 
-        let (data_to_write, nonce) = if let Some(pass) = &self.password {
-            let salt = self.index.header.salt.as_ref().unwrap();
-            // Read the entire temp file into memory for encryption
-            let mut data = Vec::new();
-            temp_file.read_to_end(&mut data)?;
-            let (encrypted_data, nonce) = crypto::encrypt(&data, pass, salt)?;
-            (encrypted_data, Some(nonce.to_vec()))
+        let (data_to_write, nonce) = if let Some(ref key) = self.key_bytes {
+             // Read the entire temp file into memory for encryption
+             let mut data = Vec::new();
+             temp_file.read_to_end(&mut data)?;
+             let (encrypted_data, nonce) = crypto::encrypt_prekey(&data, key)?;
+             (encrypted_data, Some(nonce.to_vec()))
+         } else if let Some(pass) = &self.password {
+             let salt = self.index.header.salt.as_ref().unwrap();
+             // Read into memory
+             let mut data = Vec::new();
+             temp_file.read_to_end(&mut data)?;
+             let (encrypted_data, nonce) = crypto::encrypt(&data, pass, salt)?;
+             (encrypted_data, Some(nonce.to_vec()))
         } else {
             // This path should ideally not be taken for store, as it's less efficient.
             // But for correctness, we handle it.
@@ -239,12 +253,21 @@ impl ArchiveWriter {
 
     pub fn write_bundle(&mut self, data: &[u8]) -> Result<(), ArchiverError> {
         let uncompressed_size = data.len() as u64;
-        let (data_to_write, nonce) = if let Some(pass) = &self.password {
-                        let salt = self.index.header.salt.as_ref().unwrap();
-            let (encrypted_data, nonce) = crypto::encrypt(data, pass, salt)?;
-            (encrypted_data, Some(nonce.to_vec()))
+        // Minimize extra allocations: encrypt in-place when required, otherwise stream slice directly.
+        let (data_to_write, nonce): (Cow<'_, [u8]>, Option<Vec<u8>>) = if let Some(ref key) = self.key_bytes {
+            let mut buf = data.to_vec();
+            let nonce_vec = crypto::encrypt_prekey_in_place(&mut buf, key)?;
+            (Cow::Owned(buf), Some(nonce_vec.to_vec()))
+        } else if let Some(pass) = &self.password {
+            let salt = self.index.header.salt.as_ref().unwrap();
+            let (mut buf, nonce_vec) = {
+                let (ct, n) = crypto::encrypt(data, pass, salt)?;
+                (ct, n)
+            };
+            (Cow::Owned(buf), Some(nonce_vec.to_vec()))
         } else {
-            (data.to_vec(), None)
+            // no encryption – use slice directly without cloning
+            (Cow::Borrowed(data), None)
         };
 
         self.writer.write_all(&data_to_write)?;
@@ -341,6 +364,7 @@ mod tests {
     use super::*;
     use crate::compress::CompressionAlgo;
     use std::io::{Read, Seek, SeekFrom, Write};
+use std::borrow::Cow;
     use tempfile::{tempfile, NamedTempFile};
 
     /// Tests that a new, empty archive can be created and finalized correctly.

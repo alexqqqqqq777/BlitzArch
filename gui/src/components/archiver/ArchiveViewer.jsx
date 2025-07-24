@@ -25,7 +25,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
   const [selectedExtensions, setSelectedExtensions] = useState(['all']);
   const [currentPath, setCurrentPath] = useState('/');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50; // Пагинация
+  const itemsPerPage = 50; // Pagination
 
   // Build folder hierarchy and current level items
   const { displayedFiles, totalItems, folders, breadcrumb, extensions } = useMemo(() => {
@@ -162,7 +162,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
     };
   }, [archive?.files, currentPath]);
 
-  // Files matching current filters across the ENTIRE archive (рекурсивно)
+  // Files matching current filters across the ENTIRE archive (recursively)
   const globalFilteredFiles = useMemo(() => {
     if (!archive?.files) return [];
     const lowerSearch = searchTerm.toLowerCase();
@@ -174,7 +174,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
     });
   }, [archive?.files, searchTerm, selectedExtensions]);
 
-  // Files that are currently visible in the UI (текущая папка + пагинация)
+  // Files that are currently visible in the UI (current folder + pagination)
   const filteredFiles = useMemo(() => {
     let filtered = displayedFiles.filter(item => {
       const lowerSearch = searchTerm.toLowerCase();
@@ -319,7 +319,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
         <div>
           <h3 className="text-xl font-bold text-white">{archive.name}</h3>
           <p className="text-slate-400">
-            {archive.files.length} файлов • {formatSize(archive.size)}
+            {archive.files.length} files • {formatSize(archive.size)}
           </p>
         </div>
         <Button
@@ -363,7 +363,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            placeholder="Поиск (имя или путь)..."
+            placeholder="Search (name or path)..."
             className="pl-10 bg-slate-800/30 border-slate-600/50 text-white placeholder-slate-400"
           />
         </div>
@@ -380,7 +380,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
               }`}
               onClick={() => handleExtensionToggle(ext)}
             >
-              {ext === 'all' ? 'Все' : ext}
+              {ext === 'all' ? 'All' : ext}
             </Badge>
           ))}
         </div>

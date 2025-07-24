@@ -117,7 +117,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
       <Card className="bg-slate-800/30 border-slate-600 backdrop-blur-sm">
         <CardContent className="p-8 text-center">
           <Folder className="w-16 h-16 text-slate-500 mx-auto mb-4" />
-          <p className="text-slate-400">Загрузите архив для просмотра содержимого</p>
+          <p className="text-slate-400">Load an archive to view contents</p>
         </CardContent>
       </Card>
     );
@@ -131,7 +131,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
           {archive.name}
         </CardTitle>
         <p className="text-slate-400 text-sm">
-          {archive.files?.length || 0} файлов • {formatSize(archive.size)}
+          {archive.files?.length || 0} files • {formatSize(archive.size)}
         </p>
       </CardHeader>
       
@@ -143,7 +143,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Поиск файлов..."
+              placeholder="Search files..."
               className="pl-10 bg-slate-700/50 border-slate-600 text-slate-200"
             />
           </div>
@@ -160,7 +160,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
                 }`}
                 onClick={() => handleExtensionToggle(ext)}
               >
-                {ext === 'all' ? 'Все' : ext}
+                {ext === 'all' ? 'All' : ext}
               </Badge>
             ))}
           </div>
@@ -174,7 +174,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
             onClick={handleSelectAll}
             className="border-slate-600 text-slate-200 hover:bg-slate-700"
           >
-            {selectedFiles.length === filteredFiles.length ? 'Снять все' : 'Выбрать все'}
+            {selectedFiles.length === filteredFiles.length ? 'Deselect All' : 'Select All'}
           </Button>
           
           <Button
@@ -184,7 +184,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
             className="border-slate-600 text-slate-200 hover:bg-slate-700"
           >
             <Shuffle className="w-4 h-4 mr-2" />
-            Случайно
+            Random
           </Button>
           
           <Button
@@ -194,7 +194,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
             className="bg-cyan-500 hover:bg-cyan-400 text-black"
           >
             <Download className="w-4 h-4 mr-2" />
-            Извлечь ({selectedFiles.length})
+            Extract ({selectedFiles.length})
           </Button>
         </div>
 

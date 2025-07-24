@@ -138,7 +138,7 @@ export default function DragDropZone({
               : 'bg-slate-700 text-cyan-400 hover:bg-slate-600'
           }`}
         >
-          Или выберите файлы
+          Or select files
         </label>
 
         {/* Sparkle effects */}

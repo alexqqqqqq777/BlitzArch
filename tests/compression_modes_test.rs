@@ -64,6 +64,7 @@ fn roundtrip(options: compress::CompressOptions, password: Option<&str>) {
         &[],
         password,
         Some(out_dir.path()),
+        None, // strip_components
     )
     .expect("extraction failed");
 
@@ -150,7 +151,7 @@ fn random_access_extract() {
     let selected: Vec<_> = all_files.iter().take(3).map(PathBuf::from).collect();
 
     let out_dir = tempdir().unwrap();
-    blitzarch::extract::extract_files(&arch_path, &selected, None, Some(out_dir.path())).unwrap();
+    blitzarch::extract::extract_files(&arch_path, &selected, None, Some(out_dir.path()), None).unwrap();
 
     // only selected files should exist
     let extracted: Vec<_> = fs::read_dir(out_dir.path())
@@ -189,6 +190,6 @@ fn zstd_wrong_password_fails() {
     .unwrap();
 
     let out = tempdir().unwrap();
-    let res = blitzarch::extract::extract_files(&arch_path, &[], Some("wrong"), Some(out.path()));
+    let res = blitzarch::extract::extract_files(&arch_path, &[], Some("wrong"), Some(out.path()), None);
     assert!(res.is_err(), "Extraction with wrong password should fail");
 }

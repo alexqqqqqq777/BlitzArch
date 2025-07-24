@@ -7,11 +7,11 @@ import { motion } from 'framer-motion';
 import { Zap, Gauge, Sparkles, Lock, Settings } from 'lucide-react';
 
 const PRESETS = {
-  fast: { name: 'Быстро', level: 3, color: '#00FF00', icon: Zap, desc: 'Максимальная скорость' },
-  balanced: { name: 'Сбалансированно', level: 9, color: '#FFD700', icon: Gauge, desc: 'Оптимальное соотношение' },
-  maximum: { name: 'Максимально', level: 15, color: '#FF6B35', icon: Sparkles, desc: 'Лучшее сжатие' },
-  encrypted: { name: 'Зашифрованно', level: 9, color: '#FF0080', icon: Lock, desc: 'Защищённый архив' },
-  lzma2: { name: 'LZMA2', level: 9, color: '#8A2BE2', icon: Sparkles, desc: 'Ультра сжатие' }
+  fast: { name: 'Fast', level: 3, color: '#00FF00', icon: Zap, desc: 'Maximum speed' },
+  balanced: { name: 'Balanced', level: 9, color: '#FFD700', icon: Gauge, desc: 'Optimal ratio' },
+  maximum: { name: 'Maximum', level: 15, color: '#FF6B35', icon: Sparkles, desc: 'Best compression' },
+  encrypted: { name: 'Encrypted', level: 9, color: '#FF0080', icon: Lock, desc: 'Protected archive' },
+  lzma2: { name: 'LZMA2', level: 9, color: '#8A2BE2', icon: Sparkles, desc: 'Ultra compression' }
 };
 
 export default function PresetSelector({ preset, onPresetChange, compressionLevel, onCompressionLevelChange }) {
@@ -22,7 +22,7 @@ export default function PresetSelector({ preset, onPresetChange, compressionLeve
       <CardHeader className="pb-4">
         <CardTitle className="text-cyan-300 flex items-center gap-2">
           <Settings className="w-5 h-5" />
-          Пресеты компрессии
+          Compression Presets
         </CardTitle>
       </CardHeader>
       
@@ -63,7 +63,7 @@ export default function PresetSelector({ preset, onPresetChange, compressionLeve
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-300">
-              Уровень сжатия
+              Compression Level
             </label>
             <Badge 
               variant="outline" 
@@ -83,8 +83,8 @@ export default function PresetSelector({ preset, onPresetChange, compressionLeve
           />
           
           <div className="flex justify-between text-xs text-slate-500">
-            <span>1 (быстро)</span>
-            <span>22 (сильно)</span>
+            <span>1 (fast)</span>
+            <span>22 (strong)</span>
           </div>
         </div>
 

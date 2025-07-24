@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu,
@@ -12,11 +12,13 @@ import ControlDashboard from '../components/archiver/ControlDashboard';
 import MetricsPanel from '../components/archiver/MetricsPanel';
 import TaskProgress from '../components/archiver/TaskProgress';
 import SystemStatus from '../components/archiver/SystemStatus';
+import ResultModal from '../components/archiver/ResultModal';
 import tauriBlitzArchEngine from '../lib/tauri-engine.js';
 import { invoke } from '@tauri-apps/api/core';
+
 import { determineOutputPath, generateArchiveName, createArchivePath, validateOutputDirectory } from '../lib/path-utils.js';
 
-// Новая стильная иконка с молнией
+// New stylish icon with lightning bolt
 const BlitzIcon = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -37,6 +39,44 @@ const BlitzIcon = (props) => (
   </svg>
 );
 
+// Parse katana/engine textual output to extract stats
+// Example string: "Archive complete | Files: 70002 | Time: 4.2s | Ratio: 4.34:1 | Speed: 201.1 MB/s"
+const parseEngineStats = (outputStr = '') => {
+  // Remove ANSI codes and extra spaces
+  const cleanStr = outputStr.replace(/\u001b\[[0-9;]*m/g, '').replace(/\s+/g, ' ');
+
+  const stats = {};
+
+  const filesMatch = cleanStr.match(/Files:\s*(\d+[\d,]*)/i);
+  if (filesMatch) stats.files = parseInt(filesMatch[1], 10);
+
+  // Support "Time: 4.2 s" and "Time: 4.2s"
+  const timeMatch = cleanStr.match(/Time:\s*([\d.]+)\s*s/i);
+  if (timeMatch) stats.duration = parseFloat(timeMatch[1]);
+
+  const ratioMatch = cleanStr.match(/Ratio:\s*([\d.]+)\s*:?\s*1?/i);
+  if (ratioMatch) {
+    const raw = ratioMatch[1];
+    // if number less than 1 => this is compression coefficient (compressed/original), then invert
+    const numeric = parseFloat(raw);
+    if (!isNaN(numeric)) {
+      // Don't invert; output as is
+      if (numeric < 1) {
+        stats.compressionRatio = `${numeric.toFixed(3)}:1`;
+      } else {
+        stats.compressionRatio = `${numeric.toFixed(2)}:1`;
+      }
+    } else {
+      stats.compressionRatio = raw;
+    }
+  }
+
+  const speedMatch = cleanStr.match(/Speed:\s*([\d.]+\s*[A-Z]+\/s)/i);
+  if (speedMatch) stats.speed = speedMatch[1];
+
+    return stats;
+};
+
 // Helper function to generate archive name from File objects
 const generateArchiveNameFromFiles = (files) => {
   if (!files || files.length === 0) {
@@ -56,10 +96,10 @@ const generateArchiveNameFromFiles = (files) => {
 };
 
 // Tauri-based archive creation with real file paths
-// Умное извлечение с предотвращением дублирования путей
+// Smart extraction with path duplication prevention
 const extractWithSmartPathHandling = async (archive, destinationPath, options = {}) => {
   try {
-    // Получаем список файлов в архиве
+    // Get list of files in archive
     const listResult = await tauriBlitzArchEngine.listArchive(archive.path);
     
     if (!listResult.success || !listResult.files || listResult.files.length === 0) {
@@ -70,11 +110,11 @@ const extractWithSmartPathHandling = async (archive, destinationPath, options = 
     const filePaths = listResult.files;
     console.log('📋 Archive file paths:', filePaths);
     
-    // Находим общий корневой путь всех файлов
+    // Find common root path of all files
     const commonRoot = findCommonRootPath(filePaths);
     console.log('🌳 Common root path:', commonRoot);
     
-    // Проверяем, нужно ли избегать дублирования путей
+    // Check if we need to avoid path duplication
     const needsSmartExtraction = commonRoot && (
       destinationPath.includes(commonRoot) || 
       commonRoot.includes(destinationPath.split('/').pop())
@@ -83,11 +123,11 @@ const extractWithSmartPathHandling = async (archive, destinationPath, options = 
     if (needsSmartExtraction) {
       console.log('⚠️ Path duplication detected, using smart extraction');
       
-      // Создаем временную папку для извлечения
+      // Create temporary folder for extraction
       const tempDir = `${destinationPath}/.blitzarch_temp_${Date.now()}`;
       console.log('📁 Extracting to temp directory:', tempDir);
       
-      // Извлекаем во временную папку
+      // Extract to temporary folder
       const extractResult = await tauriBlitzArchEngine.extractArchive(
         archive.path, 
         tempDir, 
@@ -98,11 +138,11 @@ const extractWithSmartPathHandling = async (archive, destinationPath, options = 
         return extractResult;
       }
       
-      // Перемещаем файлы из временной папки в целевую, избегая дублирования
+      // Move files from temporary folder to target, avoiding duplication
       console.log('🔄 Moving files to final destination...');
       const moveResult = await moveFilesSmartly(tempDir, destinationPath, commonRoot);
       
-      // Очищаем временную папку
+      // Clean up temporary folder
       await cleanupTempDirectory(tempDir);
       
       return moveResult;
@@ -112,22 +152,22 @@ const extractWithSmartPathHandling = async (archive, destinationPath, options = 
     }
   } catch (error) {
     console.error('❌ Error in smart extraction:', error);
-    // Fallback к стандартному извлечению
+    // Fallback to standard extraction
     return await tauriBlitzArchEngine.extractArchive(archive.path, destinationPath, options);
   }
 };
 
-// Находит общий корневой путь для массива путей
+// Find common root path for array of paths
 const findCommonRootPath = (paths) => {
   if (!paths || paths.length === 0) return null;
   if (paths.length === 1) {
-    // Для одного файла возвращаем его директорию
+    // For single file return its directory
     const path = paths[0];
     const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
     return lastSlash > 0 ? path.substring(0, lastSlash) : null;
   }
   
-  // Для нескольких файлов находим общий префикс
+  // For multiple files find common prefix
   const firstPath = paths[0];
   let commonPath = '';
   
@@ -140,7 +180,7 @@ const findCommonRootPath = (paths) => {
     }
   }
   
-  // Обрезаем до последнего слэша
+  // Trim to last slash
   const lastSlash = Math.max(commonPath.lastIndexOf('/'), commonPath.lastIndexOf('\\'));
   return lastSlash > 0 ? commonPath.substring(0, lastSlash) : null;
 };
@@ -151,7 +191,7 @@ const createArchiveWithGoldenStandard = async (files, settings) => {
     password = null,
     bundleSize = 32,
     threads = 0,
-    codecThreads = 0, // пока не используется в бэкенде, но оставим для совместимости
+    codecThreads = 0, // not used in backend yet, but keep for compatibility
     memoryBudget = 0
   } = settings;
   try {
@@ -202,7 +242,8 @@ const createArchiveWithGoldenStandard = async (files, settings) => {
         output: result.output,
         archivePath: result.archivePath,
         archiveName: archiveName,
-        outputDir: outputDir
+        outputDir: outputDir,
+        stats: result.stats || null
       };
     } else {
       console.error('❌ Failed to create archive:', result.error);
@@ -226,6 +267,11 @@ export default function BlitzArch() {
   const [progress, setProgress] = useState(0);
   const [speed, setSpeed] = useState(0);
   const [finalMessage, setFinalMessage] = useState(null);
+  // Ref to keep last progress data
+  const lastProgressRef = useRef(null);
+  // Result modal state
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [resultData, setResultData] = useState(null);
   
   // Rich metrics state
   const [processedFiles, setProcessedFiles] = useState(0);
@@ -261,7 +307,8 @@ export default function BlitzArch() {
           console.log('📊 Progress update received:', progressData);
           
           // Update basic progress and speed from real-time events
-          setProgress(Math.min(progressData.progress ?? 0, 100));
+          lastProgressRef.current = progressData; // save last event
+      setProgress(Math.min(progressData.progress ?? 0, 100));
           setSpeed(progressData.speed || 0);
           
           // Update all rich metrics
@@ -332,7 +379,7 @@ export default function BlitzArch() {
         if (dragData.type !== 'blitzarch-file') return;
         
         console.log('🎯 Drag-out detected:', dragData);
-        addLog(`🎯 Извлекаем файл: ${dragData.fileName}`, 'info');
+        addLog(`🎯 Extracting file: ${dragData.fileName}`, 'info');
         
         // Determine target directory (Downloads folder as fallback)
         const downloadsDir = await invoke('get_downloads_path')
@@ -340,7 +387,7 @@ export default function BlitzArch() {
         
         // Extract file using our new command
         const result = await invoke('drag_out_extract', {
-  // Передаем обе вариации ключей (snake_case и camelCase) для совместимости
+  // Pass both key variations (snake_case and camelCase) for compatibility
   archive_path: dragData.archivePath,
   archivePath: dragData.archivePath,
   file_path: dragData.filePath,
@@ -351,14 +398,14 @@ export default function BlitzArch() {
 });
         
         if (result.success) {
-          addLog(`✅ Файл успешно извлечён: ${result.archive_path}`, 'success');
+          addLog(`✅ File extracted successfully: ${result.archive_path}`, 'success');
         } else {
-          addLog(`❌ Ошибка извлечения: ${result.error}`, 'error');
+          addLog(`❌ Extraction error: ${result.error}`, 'error');
         }
         
       } catch (error) {
         console.error('❌ Drag-out error:', error);
-        addLog(`❌ Ошибка drag-out: ${error.message}`, 'error');
+        addLog(`❌ Drag-out error: ${error.message}`, 'error');
       }
     };
     
@@ -380,7 +427,7 @@ export default function BlitzArch() {
 
   const handleCreateArchive = useCallback(async (files) => {
     if (!files || files.length === 0) {
-      addLog('Не выбраны файлы для архивации', 'error');
+      addLog('No files selected for archiving', 'error');
       return;
     }
 
@@ -388,19 +435,62 @@ export default function BlitzArch() {
     setProgress(0);
     setSpeed(0);
     
-    addLog(`🚀 Начинаем создание архива из ${files.length} файлов...`);
-    addLog(`📋 Файлы: ${files.map(f => f.name || f).join(', ')}`);
+    addLog(`🚀 Starting archive creation from ${files.length} files...`);
+    addLog(`📋 Files: ${files.map(f => f.name || f).join(', ')}`);
     
     try {
       const result = await createArchiveWithGoldenStandard(files, settings);
+      const formatSpeed = (val) => {
+            if(!val) return undefined;
+            let mbs = val;
+            // if value looks like bytes/sec convert
+            if (val > 1000) mbs = val / (1024*1024);
+            return `${mbs.toFixed(1)} MB/s`;
+          };
+          const formatRatio = (val) => {
+            if(!val) return undefined;
+             // Don't invert, just round
+             if (val > 0 && val < 1) return `${val.toFixed(3)}:1`;
+            if (val > 1 && val < 1000) return `${val.toFixed(2)}:1`;
+            return undefined;
+          };
+          // Формируем объект статистики
+          let statsObj = {};
+          if (result.success) {
+            console.log('🔍 result.stats from backend:', result.stats);
+            console.log('🔍 result.output from backend:', result.output);
+            
+            if (result.stats && Object.keys(result.stats).length > 0) {
+              statsObj = result.stats;
+              console.log('✅ Using backend stats:', statsObj);
+            } else {
+              // Parse engine text output
+              statsObj = parseEngineStats(result.output);
+              console.log('🔍 Parsed stats from output:', statsObj);
+            }
+
+        // If backend didn't return statistics (may be empty object), try to supplement it with data from last progress event
+        if (!statsObj || Object.keys(statsObj).length === 0 || (!statsObj.files && !statsObj.duration)) {
+          const pd = lastProgressRef.current;
+          if (pd) {
+            statsObj = {
+              files: pd.total_files ?? pd.processed_files,
+              duration: pd.duration ?? pd.elapsed,
+              compressionRatio: formatRatio(pd.compression_ratio),
+              speed: formatSpeed(pd.speed),
+              size: pd.total_bytes ?? pd.processed_bytes
+            };
+          }
+        }
+      }
       
       if (result.success) {
-        addLog(`✅ Архив успешно создан!`, 'success');
-        addLog(`📦 Имя архива: ${result.archiveName}`, 'success');
-        addLog(`📁 Расположение: ${result.outputDir}`, 'success');
-        addLog(`🗂️ Полный путь: ${result.archivePath}`, 'success');
+        addLog(`✅ Archive created successfully!`, 'success');
+        addLog(`📦 Archive name: ${result.archiveName}`, 'success');
+        addLog(`📁 Location: ${result.outputDir}`, 'success');
+        addLog(`🗾️ Full path: ${result.archivePath}`, 'success');
         
-        // Добавляем созданный архив в список
+        // Add the created archive to the list
         const newArchive = {
           id: Date.now().toString(),
           name: result.archiveName + '.blz',
@@ -410,11 +500,30 @@ export default function BlitzArch() {
           files: files.length
         };
         setArchives(prev => [newArchive, ...prev]);
+        setResultData({
+          type: 'create_success',
+          message: 'Archive created successfully',
+          outputPath: result.archivePath,
+          stats: statsObj
+        });
+        setIsResultModalOpen(true);
       } else {
-        addLog(`❌ Ошибка создания архива: ${result.error}`, 'error');
+        addLog(`❌ Archive creation error: ${result.error}`, 'error');
+        setResultData({
+          type: 'create_error',
+          message: result.error,
+          error: result.error
+        });
+        setIsResultModalOpen(true);
       }
     } catch (error) {
-      addLog(`💥 Неожиданная ошибка: ${error.message}`, 'error');
+      addLog(`💥 Unexpected error: ${error.message}`, 'error');
+      setResultData({
+        type: 'create_error',
+        message: error.message,
+        error: error.message
+      });
+      setIsResultModalOpen(true);
     } finally {
       setIsProcessing(false);
       setProgress(100);
@@ -448,7 +557,7 @@ export default function BlitzArch() {
         const archiveObj = {
           name: actualPath.split('/').pop(),
           path: actualPath,
-          files: result.files, // Используем реальные данные, полученные от движка
+          files: result.files, // Use real data from engine
           encrypted: false
         };
         
@@ -464,6 +573,12 @@ export default function BlitzArch() {
   };
 
   const handleExtractArchive = async (extractRequest = []) => {
+
+    
+    // Initialize statsObj to avoid ReferenceError
+    let statsObj = {};
+    let batchHadPasswordError = false; // Flag to track password errors in batch mode
+    
     // Handle different input formats:
     // 1. Legacy: array of file paths (batch mode)
     // 2. New: object with {archivePath, selectedFiles} from ArchiveExplorer
@@ -490,19 +605,15 @@ export default function BlitzArch() {
       return;
     }
     
-    startProcessing('extract');
-    setProgress(0);
-    setSpeed(0);
-    
     // Handle batch extraction of multiple archives
     if (isBatchMode) {
       // --- Batch list sanitation ----------------------------------------------------
-      const archiveExts = ['.blz']; // поддерживаемые архивы для batch-mode
+      const archiveExts = ['.blz']; // supported archives for batch-mode
       const uniqueByPath = Array.from(new Set(selectedFiles.map(f => (f.path || f).toString())));
       const sanitized = uniqueByPath.filter(p => archiveExts.some(ext => p.toLowerCase().endsWith(ext)));
 
       if (sanitized.length === 0) {
-        addLog('Не найдено валидных архивов для извлечения', 'warning');
+        addLog('No valid archives found for extraction', 'warning');
         setIsProcessing(false);
         setProcessingType(null);
         return;
@@ -533,9 +644,96 @@ export default function BlitzArch() {
           );
           
           if (result.success) {
+            // Try to get ready statistics object from engine
+            statsObj = result.stats || {};
+            // If engine doesn't return stats yet, parse text output
+            if (!statsObj || Object.keys(statsObj).length === 0) {
+              const parsed = parseEngineStats(result.output);
+              if (parsed && Object.keys(parsed).length > 0) {
+                statsObj = parsed;
+              }
+            }
             addLog(`[${i + 1}/${sanitized.length}] ✅ ${archiveName} extracted successfully`, 'success');
           } else {
             addLog(`[${i + 1}/${sanitized.length}] ❌ Failed to extract ${archiveName}: ${result.error}`, 'error');
+            
+            // Show ResultModal immediately for password errors
+            if (result.error && result.error.includes('password required')) {
+              batchHadPasswordError = true; // Set flag to prevent batch completion modal
+              
+              // Create retry function that will retry extraction with new password
+              const retryExtraction = async (newPassword) => {
+                setIsProcessing(true);
+                startProcessing('extract');
+                setIsResultModalOpen(false); // Close modal during retry
+                
+                try {
+                  const retryResult = await tauriBlitzArchEngine.extractArchive(
+                    archivePath,
+                    archiveDir,
+                    { 
+                      password: newPassword, // Use new password
+                      autoStripComponents: true
+                    }
+                  );
+                  
+
+                  
+                  if (retryResult.success) {
+                    // Success - show success modal
+                    const successData = {
+                      type: 'extract_success',
+                      message: `Archive ${archiveName} extracted successfully`,
+                      outputPath: archiveDir,
+                      stats: retryResult.stats || {}
+                    };
+                    setResultData(successData);
+                    setIsResultModalOpen(true);
+                    addLog(`✅ ${archiveName} extracted successfully with password`, 'success');
+                    return true; // Success
+                  } else {
+                    // Still failed - show error again
+                    const errorData = {
+                      type: 'password_error',
+                      message: `Password required for ${archiveName}`,
+                      error: retryResult.error,
+                      onRetry: retryExtraction // Allow another retry
+                    };
+                    setResultData(errorData);
+                    setIsResultModalOpen(true);
+                    addLog(`❌ ${archiveName} retry failed: ${retryResult.error}`, 'error');
+                    return false; // Still failed
+                  }
+                } catch (error) {
+                  // Exception during retry
+                  const errorData = {
+                    type: 'extract_error',
+                    message: `Error retrying ${archiveName}`,
+                    error: error.message
+                  };
+                  setResultData(errorData);
+                  setIsResultModalOpen(true);
+                  addLog(`❌ ${archiveName} retry error: ${error.message}`, 'error');
+                  return false;
+                } finally {
+                  setIsProcessing(false);
+                  setProcessingType(null);
+                }
+              };
+              
+              const passwordErrorData = {
+                type: 'password_error', // Use password_error type to show input field
+                message: `Password required for ${archiveName}`,
+                error: result.error,
+                onRetry: retryExtraction // Pass retry function
+              };
+              setResultData(passwordErrorData);
+              setIsResultModalOpen(true);
+              
+              setIsProcessing(false);
+              setProcessingType(null);
+              return; // Stop batch processing on password error
+            }
           }
         } catch (error) {
           addLog(`[${i + 1}/${sanitized.length}] ❌ Error extracting ${archiveName}: ${error.message}`, 'error');
@@ -547,6 +745,20 @@ export default function BlitzArch() {
       }
       
       addLog(`Batch extraction completed: ${sanitized.length} archives processed`, 'info');
+      
+      // Show ResultModal for batch extraction results only if no password error occurred
+      if (!batchHadPasswordError) {
+        const resultData = {
+          type: 'extract_success', // TODO: handle mixed success/error results
+          message: `Batch extraction completed: ${sanitized.length} archives processed`,
+          outputPath: 'Multiple locations', // TODO: collect all output paths
+          stats: statsObj // Use stats from last successful extraction
+        };
+        setResultData(resultData);
+        setIsResultModalOpen(true);
+      } else {
+      }
+      
       setIsProcessing(false);
       setProcessingType(null);
       return;
@@ -578,11 +790,52 @@ export default function BlitzArch() {
         
         if (result.success) {
           addLog(`Files extracted successfully from ${archiveName}`, 'success');
+          // Формируем объект статистики
+         let statsObj = {};
+         if (result.stats && Object.keys(result.stats).length > 0) {
+           statsObj = result.stats;
+         } else {
+           statsObj = parseEngineStats(result.output);
+         }
+         if (!statsObj || Object.keys(statsObj).length === 0 || (!statsObj.files && !statsObj.duration)) {
+           const pd = lastProgressRef.current;
+           if (pd) {
+             statsObj = {
+               files: pd.total_files ?? pd.processed_files,
+               duration: pd.duration ?? pd.elapsed,
+               compressionRatio: formatRatio(pd.compression_ratio),
+               speed: formatSpeed(pd.speed),
+               size: pd.total_bytes ?? pd.processed_bytes
+             };
+           }
+         }
+          const resultData = {
+            type: 'extract_success',
+            message: 'Files extracted successfully',
+            outputPath: archiveDir,
+            stats: statsObj
+          };
+          setResultData(resultData);
+          setIsResultModalOpen(true);
         } else {
           addLog(`Failed to extract files from ${archiveName}: ${result.error}`, 'error');
+          const errorData = {
+            type: 'extract_error',
+            message: result.error,
+            error: result.error
+          };
+          setResultData(errorData);
+          setIsResultModalOpen(true);
         }
       } catch (error) {
         addLog(`Error extracting files: ${error.message}`, 'error');
+        const catchErrorData = {
+          type: 'extract_error',
+          message: error.message,
+          error: error.message
+        };
+        setResultData(catchErrorData);
+        setIsResultModalOpen(true);
       } finally {
         setIsProcessing(false);
         setProcessingType(null);
@@ -629,11 +882,52 @@ export default function BlitzArch() {
       
       if (result.success) {
         addLog(`Archive extracted successfully to: ${destinationPath}`, 'success');
+
+        // Формируем объект статистики
+         let statsObj = {};
+         if (result.stats && Object.keys(result.stats).length > 0) {
+           statsObj = result.stats;
+         } else {
+           statsObj = parseEngineStats(result.output);
+         }
+         if (!statsObj || Object.keys(statsObj).length === 0 || (!statsObj.files && !statsObj.duration)) {
+           const pd = lastProgressRef.current;
+           if (pd) {
+             statsObj = {
+               files: pd.total_files ?? pd.processed_files,
+               duration: pd.duration ?? pd.elapsed,
+               compressionRatio: formatRatio(pd.compression_ratio),
+               speed: formatSpeed(pd.speed),
+               size: pd.total_bytes ?? pd.processed_bytes
+             };
+           }
+         }
+        setResultData({
+          type: 'extract_success',
+          message: 'Files extracted successfully',
+          outputPath: destinationPath,
+          stats: statsObj
+        });
+        setIsResultModalOpen(true);
       } else {
         addLog(`Failed to extract archive: ${result.error}`, 'error');
+
+        setResultData({
+          type: 'extract_error',
+          message: result.error || 'Archive extraction error',
+          error: result.error
+        });
+        setIsResultModalOpen(true);
       }
     } catch (error) {
       addLog(`Error extracting archive: ${error.message}`, 'error');
+
+      setResultData({
+        type: 'extract_error',
+        message: error.message || 'Archive extraction error',
+        error: error.message
+      });
+      setIsResultModalOpen(true);
     } finally {
       setIsProcessing(false);
       setProcessingType(null);
@@ -659,6 +953,7 @@ export default function BlitzArch() {
 
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-950 font-sans">
       <div className="min-h-screen relative">
         {/* Grid overlay */}
@@ -768,5 +1063,7 @@ export default function BlitzArch() {
         </div>
       </div>
     </div>
+    <ResultModal isOpen={isResultModalOpen} onClose={() => setIsResultModalOpen(false)} result={resultData} />
+  </>
   );
 }

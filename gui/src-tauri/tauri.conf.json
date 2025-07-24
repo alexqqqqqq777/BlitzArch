@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "blitzarch-gui",
-        "width": 800,
-        "height": 600,
+        "width": 920,
+        "height": 690,
         "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": true

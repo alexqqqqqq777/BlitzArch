@@ -48,7 +48,7 @@ fn katana_roundtrip_basic() {
     assert!(katana::is_katana_archive(&arch_path).unwrap());
 
     let out = tempdir().unwrap();
-    blitzarch::extract::extract_files(&arch_path, &[], None, Some(out.path())).unwrap();
+    blitzarch::extract::extract_files(&arch_path, &[], None, Some(out.path()), None).unwrap();
     dirs_equal(src.path(), out.path());
 }
 

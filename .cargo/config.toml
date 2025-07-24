@@ -1,2 +1,7 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+[check-cfg]
+# Разрешаем устаревшую cfg(cargo-clippy) из macros objc
+names = ["cargo-clippy"]
+features = ["cargo-clippy"]

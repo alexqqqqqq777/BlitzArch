@@ -31,7 +31,7 @@ fn katana_random_access_extract() {
     // We want to extract only dir/c.log
     let want_rel: PathBuf = PathBuf::from("dir/c.log");
     let out = tempdir().unwrap();
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[want_rel.clone()], None).unwrap();
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[want_rel.clone()], None, None).unwrap();
 
     // Check only wanted file exists and matches
     let extracted_path = out.path().join(&want_rel);

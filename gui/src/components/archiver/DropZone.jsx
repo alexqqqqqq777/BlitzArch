@@ -122,13 +122,13 @@ export default function DropZone({
         <h3 className={`text-2xl font-bold mb-2 transition-colors ${
           isDragOver ? colors.text : isProcessing ? 'text-orange-400' : 'text-white'
         }`}>
-          {isProcessing ? 'Обработка...' : title}
+          {isProcessing ? 'Processing...' : title}
         </h3>
 
         <p className={`text-center mb-6 transition-colors ${
           isDragOver ? colors.text.replace('400', '300') : isProcessing ? 'text-orange-300' : 'text-slate-400'
         }`}>
-          {isProcessing ? 'Пожалуйста, подождите' : subtitle}
+          {isProcessing ? 'Please wait' : subtitle}
         </p>
 
         {!isProcessing && (
@@ -151,7 +151,7 @@ export default function DropZone({
               }`}
             >
               <Plus className="w-5 h-5 inline mr-2" />
-              Выбрать файлы
+              Select Files
             </label>
           </div>
         )}

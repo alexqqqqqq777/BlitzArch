@@ -3,6 +3,7 @@
 # ------------------------------
 # Base Rust template
 /target/
+**/target/
 **/*.rs.bk
 # Cargo.lock (commit for application)
 
@@ -55,12 +56,21 @@ node_modules/
 /gui/**/debug/
 /gui/src-tauri/bundled/
 
-# Compiled binaries & object files
-*.rmeta
+# All Rust build artifacts (comprehensive)
+**/target/
+**/debug/
+**/*.rlib
+**/*.rmeta
+**/*.d
 *.o
 *.a
 *.dylib
 *.exe
+
+# Test integration artifacts
+test-integration/target/
+test-integration/**/*.rlib
+test-integration/**/*.d
 
 # Python virtual environments
 .venv/

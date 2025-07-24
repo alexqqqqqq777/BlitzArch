@@ -52,7 +52,7 @@ fn katana_unicode_filenames_roundtrip() {
 
     // Extract
     let out = tempdir().unwrap();
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None)
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None, None)
         .expect("extract");
 
     // Compare dirs
@@ -88,7 +88,7 @@ fn katana_windows_path_handling() {
 
     // Извлекаем в разные тестовые директории, проверяем что все ок
     let extract_dir1 = tempdir().unwrap();
-    let _ = katana::extract_katana_archive_internal(&arch_path, extract_dir1.path(), &[], None).expect("extract");    
+    let _ = katana::extract_katana_archive_internal(&arch_path, extract_dir1.path(), &[], None, None).expect("extract");    
     
     // Проверим нашу логику нормализации путей напрямую
     // Создадим мок-структуру для тестирования только нормализации путей
@@ -179,7 +179,7 @@ fn katana_permissions_preserved() {
 
     // Extract
     let out = tempdir().unwrap();
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None)
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None, None)
         .expect("extract");
 
     let extracted_path = out.path().join("script.sh");
@@ -200,7 +200,7 @@ fn katana_wrong_password_fails() {
         .expect("create");
 
     let out = tempdir().unwrap();
-    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], Some("wrong_pass".into()));
+    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], Some("wrong_pass".into()), None);
     assert!(res.is_err(), "Extraction should fail with wrong password");
 }
 
@@ -227,7 +227,7 @@ fn katana_corrupted_archive_detection() {
     f.sync_all().unwrap();
 
     let out = tempdir().unwrap();
-    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None);
+    let res = katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None, None);
     assert!(res.is_err(), "Extraction should fail on corrupted archive");
 }
 
@@ -281,7 +281,7 @@ fn katana_absolute_path_traversal_blocked() {
     let entries = fs::read_dir(out.path()).unwrap().count();
     println!("Output dir contains {} entries before extraction", entries);
     
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None).expect("extract");
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[], None, None).expect("extract");
 
     // Проверим содержимое директории после распаковки
     println!("Contents of output dir after extraction:");
@@ -318,7 +318,7 @@ fn katana_million_files_selective_extract() {
     let target_rel = format!("dir{}/file{}.txt", (FILES-1)/1000, FILES-1);
     let out = tempdir().unwrap();
     let t_ext = Instant::now();
-    katana::extract_katana_archive_internal(&arch_path, out.path(), &[target_rel.clone().into()], None).expect("extract one");
+    katana::extract_katana_archive_internal(&arch_path, out.path(), &[target_rel.clone().into()], None, None).expect("extract one");
     let ext_ms = t_ext.elapsed().as_millis();
     println!("[marketing] selective extract in {} ms", ext_ms);
 

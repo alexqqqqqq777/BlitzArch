@@ -37,11 +37,16 @@ fn extract_from_decoder(
     decoder: &mut dyn Read,
     files: &[FileIndexEntry],
     base_output_path: &Path,
+    strip_components: Option<u32>,
 ) -> io::Result<()> {
     // SAFETY: This duplicates the helper from `extract::mod` for now.
     let mut current_offset_in_bundle = 0;
     for file_entry in files {
-        let target_path = base_output_path.join(&file_entry.path);
+        let stripped_path = strip_components.map_or_else(
+            || file_entry.path.clone(),
+            |n| super::strip_path_components(&file_entry.path, n)
+        );
+        let target_path = base_output_path.join(stripped_path);
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -105,10 +110,11 @@ pub fn extract_bundle_sequential(
     files: &[FileIndexEntry],
     index: &ArchiveIndex,
     base_output_path: &Path,
+    strip_components: Option<u32>,
 ) -> io::Result<()> {
     // --- Zero-copy fast path for plain Store bundles ---
     if bundle_info.algo == "store" {
-        return extract_store_bundle_zero_copy(archive_path, bundle_info, files, base_output_path);
+        return extract_store_bundle_zero_copy(archive_path, bundle_info, files, base_output_path, strip_components);
     }
     use std::io::BufReader;
 
@@ -139,7 +145,7 @@ pub fn extract_bundle_sequential(
         }
     };
 
-    extract_from_decoder(&mut decoder, files, base_output_path)
+    extract_from_decoder(&mut decoder, files, base_output_path, strip_components)
 }
 
 use rayon::prelude::*;
@@ -153,6 +159,7 @@ fn extract_store_bundle_zero_copy(
     bundle_info: &crate::archive::BundleInfo,
     files: &[FileIndexEntry],
     base_output_path: &Path,
+    strip_components: Option<u32>,
 ) -> io::Result<()> {
     use std::io::{Read, Seek};
     let mut archive = File::open(archive_path)?;
@@ -171,7 +178,11 @@ fn extract_store_bundle_zero_copy(
         // We'll copy exactly `file_size` bytes of payload after the prefix.
         let bytes_to_copy = file_size;
 
-        let target_path = base_output_path.join(&entry.path);
+        let stripped_path = strip_components.map_or_else(
+            || entry.path.clone(),
+            |n| super::strip_path_components(&entry.path, n)
+        );
+        let target_path = base_output_path.join(stripped_path);
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -196,17 +207,18 @@ pub fn extract_bundle_parallel(
     files: &[FileIndexEntry],
     index: &ArchiveIndex,
     base_output_path: &Path,
+    strip_components: Option<u32>,
 ) -> io::Result<()> {
     // Fast-path: если весь бандл записан в режиме `Store`, параллельная обработка даёт
     // лишь накладные расходы. Используем проверенный последовательный путь.
     if bundle_info.algo == "store" {
-        return extract_bundle_sequential(archive_path, bundle_info, files, index, base_output_path);
+        return extract_bundle_sequential(archive_path, bundle_info, files, index, base_output_path, strip_components);
     }
 
     // Для очень больших бандлов (>2 ГБ) тоже лучше остаться на последовательном пути —
     // объём I/O сопоставим, но избегаем лишних seek'ов.
     if bundle_info.compressed_size > 2 * 1024 * 1024 * 1024 {
-        return extract_bundle_sequential(archive_path, bundle_info, files, index, base_output_path);
+        return extract_bundle_sequential(archive_path, bundle_info, files, index, base_output_path, strip_components);
     }
 
     // 1. Read compressed bundle into memory.

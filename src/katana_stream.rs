@@ -16,6 +16,15 @@ use num_cpus;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
+// --- crypto & hashing ---------------------------------------------------
+use aes_gcm_stream::Aes256GcmStreamEncryptor;
+use rand::rngs::OsRng;
+use rand::RngCore;
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+use crc32fast::Hasher as Crc32Hasher;
+
+type HmacSha256 = Hmac<Sha256>;
 
 // Local replicas of structs to avoid cross-module visibility hassles
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,12 +41,50 @@ struct ShardInfo {
     compressed_size: u64,
     uncompressed_size: u64,
     file_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nonce: Option<[u8; 12]>,
 }
+
 
 const KATANA_MAGIC: &[u8; 8] = b"KATIDX01";
 
 const FLUSH_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
 const MAX_INFLIGHT: usize = 3; // количество буферов в канале
+
+// --- Streaming encrypt sink --------------------------------------------
+struct EncryptSink<'a> {
+    inner: &'a mut File,
+    enc: Aes256GcmStreamEncryptor,
+    bytes: u64,
+    nonce: [u8; 12],
+}
+impl<'a> EncryptSink<'a> {
+    fn new(inner: &'a mut File, key: &[u8; 32], nonce: [u8; 12]) -> Self {
+        let enc = Aes256GcmStreamEncryptor::new(*key, &nonce);
+        Self { inner, enc, bytes: 0, nonce }
+    }
+    fn finalize(mut self) -> std::io::Result<([u8; 12], u64)> {
+        let (ct_tail, tag) = self.enc.finalize();
+        if !ct_tail.is_empty() {
+            self.inner.write_all(&ct_tail)?;
+            self.bytes += ct_tail.len() as u64;
+        }
+        self.inner.write_all(&tag)?;
+        self.bytes += tag.len() as u64;
+        Ok((self.nonce, self.bytes))
+    }
+}
+impl<'a> Write for EncryptSink<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let ct = self.enc.update(buf);
+        self.inner.write_all(&ct)?;
+        self.bytes += ct.len() as u64;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
 
 /// Сообщения от воркеров координатору
 enum ShardMsg {
@@ -47,7 +94,9 @@ enum ShardMsg {
         compressed: u64,
         uncompressed: u64,
         files: Vec<FileEntry>,
+        nonce: Option<[u8; 12]>,
     },
+
 }
 
 /// Разбить вектор на приблизительно равные под-массивы
@@ -67,16 +116,57 @@ pub fn create_katana_archive(
     inputs: &[PathBuf],
     output_path: &Path,
     threads: usize,
-    codec_threads: u32,
+    mut codec_threads: u32,
     level: i32,
     password: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
-    // If encryption requested, fallback to non-stream Katana implementation which supports it
+    // ---------------- Adaptive codec threads by memory budget -----------------
+    // If codec_threads == 0, interpret as "auto under memory budget".
+    if codec_threads == 0 {
+        const MAX_INFLIGHT_LOCAL: u64 = MAX_INFLIGHT as u64;
+        // read memory budget from env (MiB). "0" or missing -> unlimited
+        let budget_bytes = std::env::var("BLITZ_MEM_BUDGET_MB")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .filter(|&mb| mb > 0)
+            .map(|mb| mb * 1024 * 1024)
+            .unwrap_or(u64::MAX);
+
+        // simple heuristic: est mem per thread depends on level
+        let est_mem_per_thread = match level {
+            0..=4 => 32 * 1024 * 1024u64,    // 32 MiB
+            5..=8 => 64 * 1024 * 1024u64,    // 64 MiB
+            _ => 128 * 1024 * 1024u64,       // 128 MiB
+        } + 2 * 1024 * 1024u64; // +input buffer
+
+        // consider global inflight factor and extra 8 MiB buffer
+        let mem_per_shard_threads = est_mem_per_thread * MAX_INFLIGHT_LOCAL;
+        let mut max_threads_by_mem = if budget_bytes == u64::MAX {
+            num_cpus::get() as u32
+        } else {
+            ((budget_bytes.saturating_sub(8 * 1024 * 1024)) / mem_per_shard_threads) as u32
+        };
+        if max_threads_by_mem == 0 { max_threads_by_mem = 1; }
+        let cpu_cores = num_cpus::get() as u32;
+        codec_threads = std::cmp::min(max_threads_by_mem, cpu_cores);
+        if codec_threads == 0 { codec_threads = 1; }
+        // Safety cap: don't spawn more than 8 codec threads – diminishing returns
+        codec_threads = codec_threads.min(8);
+    }
+    // Подготовка шифрования (генерация соли/ключа) при наличии пароля
     if password.is_some() {
-        return crate::katana::create_katana_archive(inputs, output_path, threads, password);
+        /* fallback удалён – теперь поддерживаем потоковое шифрование напрямую */
     }
     // --- High-level stats ---
-    let start_ts = Instant::now();
+    // Ключ/соль
+let (key_opt, salt_opt) = if let Some(ref pwd) = password {
+    let salt = crate::crypto::generate_salt();
+    let key = crate::crypto::derive_key_argon2(pwd, &salt);
+    (Some(Arc::new(key)), Some(salt))
+} else {
+    (None, None)
+};
+let start_ts = Instant::now();
     // 1. Собрать список файлов
     let mut files = Vec::new();
     for path in inputs {
@@ -130,6 +220,7 @@ pub fn create_katana_archive(
     rayon::scope(|s| {
         // workers
         for (shard_id, chunk) in file_chunks.into_iter().enumerate() {
+            let key_clone = key_opt.clone();
             let tx = tx.clone();
             let base_dir: Arc<PathBuf> = Arc::clone(&base_dir);
             s.spawn(move |_| {
@@ -137,50 +228,87 @@ pub fn create_katana_archive(
                 let mut tmp = NamedTempFile::new().expect("tmp");
                 let tmp_path = tmp.path().to_path_buf();
 
-                // zstd encoder пишет напрямую в temp-файл
-                let zstd_threads: u32 = if codec_threads == 0 { num_cpus::get() as u32 } else { codec_threads };
-                let mut encoder = zstd::Encoder::new(tmp.as_file_mut(), level).expect("enc");
-                encoder.include_checksum(true).expect("chk");
-                encoder.multithread(zstd_threads).expect("mt");
-
-                let mut in_buf = vec![0u8; 2 << 20]; // 2 MiB чтения
-                let mut local_files = Vec::new();
+                let mut outfile = tmp.as_file_mut();
+                let mut nonce_opt: Option<[u8; 12]> = None;
                 let mut uncompressed: u64 = 0;
+                let mut local_files: Vec<FileEntry> = Vec::new();
 
-                for path in &chunk {
-                    let mut f = File::open(path).expect("open");
-                    let meta = f.metadata().expect("meta");
-                    let rel_path = match path.strip_prefix(base_dir.as_path()) {
-                        Ok(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
-                        _ => path.strip_prefix(std::path::Component::RootDir.as_os_str()).unwrap_or(path).to_path_buf(),
-                    };
-                    let normalized_path = crate::katana::normalize_path(&rel_path.to_string_lossy());
-                    if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
-                        eprintln!("[dbg] normalize_path: {} -> {}", path.display(), normalized_path);
-                    }
-                    local_files.push(FileEntry {
-                        path: normalized_path,
-                        size: meta.len(),
-                        offset: uncompressed, // record current offset before writing
-                        permissions: {
-                            #[cfg(unix)]
-                            { crate::fsx::maybe_unix_mode(&meta) }
-                            #[cfg(not(unix))]
-                            { None }
-                        },
-                    });
-                    loop {
-                        let rd = f.read(&mut in_buf).expect("read");
-                        if rd == 0 {
-                            break;
+                // Создаём encoder в двух вариантах
+                if let Some(ref key_arc) = key_clone {
+                    let mut nonce = [0u8; 12];
+                    OsRng.fill_bytes(&mut nonce);
+                    nonce_opt = Some(nonce);
+                    let mut sink = EncryptSink::new(&mut outfile, &*key_arc, nonce);
+                    let zstd_threads: u32 = codec_threads; // 0 ⇒ однопоточный zstd
+                    {
+                        let mut encoder = zstd::Encoder::new(&mut sink, level).expect("enc");
+                        encoder.include_checksum(true).expect("chk");
+                        if zstd_threads > 1 {
+                            encoder.multithread(zstd_threads).expect("mt");
                         }
-                        uncompressed += rd as u64;
-                        encoder.write_all(&in_buf[..rd]).expect("enc write");
+                        let mut in_buf = vec![0u8; 2 << 20]; // 2 MiB
+                        for path in &chunk {
+                            let mut f = File::open(path).expect("open");
+                            let meta = f.metadata().expect("meta");
+                            let rel_path = match path.strip_prefix(base_dir.as_path()) {
+                                Ok(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+                                _ => path.to_path_buf(),
+                            };
+                            let normalized_path = crate::katana::normalize_path(&rel_path.to_string_lossy());
+                            local_files.push(FileEntry {
+                                path: normalized_path,
+                                size: meta.len(),
+                                offset: uncompressed,
+                                permissions: {
+                                    #[cfg(unix)] { crate::fsx::maybe_unix_mode(&meta) }
+                                    #[cfg(not(unix))] { None }
+                                },
+                            });
+                            loop {
+                                let rd = f.read(&mut in_buf).expect("read");
+                                if rd == 0 { break; }
+                                uncompressed += rd as u64;
+                                encoder.write_all(&in_buf[..rd]).expect("enc write");
+                            }
+                        }
+                        encoder.finish().expect("finish");
                     }
+                    // finalize encryption tag
+                    let (_n, _bytes) = sink.finalize().expect("finalize");
+                } else {
+                    let zstd_threads: u32 = codec_threads; // 0 ⇒ однопоточный zstd
+                    let mut encoder = zstd::Encoder::new(&mut outfile, level).expect("enc");
+                    encoder.include_checksum(true).expect("chk");
+                    if zstd_threads > 1 {
+                            encoder.multithread(zstd_threads).expect("mt");
+                        }
+                    let mut in_buf = vec![0u8; 2 << 20];
+                    for path in &chunk {
+                        let mut f = File::open(path).expect("open");
+                        let meta = f.metadata().expect("meta");
+                        let rel_path = match path.strip_prefix(base_dir.as_path()) {
+                            Ok(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+                            _ => path.to_path_buf(),
+                        };
+                        let normalized_path = crate::katana::normalize_path(&rel_path.to_string_lossy());
+                        local_files.push(FileEntry {
+                            path: normalized_path,
+                            size: meta.len(),
+                            offset: uncompressed,
+                            permissions: {
+                                #[cfg(unix)] { crate::fsx::maybe_unix_mode(&meta) }
+                                #[cfg(not(unix))] { None }
+                            },
+                        });
+                        loop {
+                            let rd = f.read(&mut in_buf).expect("read");
+                            if rd == 0 { break; }
+                            uncompressed += rd as u64;
+                            encoder.write_all(&in_buf[..rd]).expect("enc write");
+                        }
+                    }
+                    encoder.finish().expect("finish");
                 }
-                // Завершить поток
-                encoder.finish().expect("finish");
-                // Преобразуем во временный путь, который удалится автоматически при Drop
                 let temp_path: TempPath = tmp.into_temp_path();
                 let compressed = std::fs::metadata(&temp_path).expect("meta").len();
 
@@ -190,14 +318,14 @@ pub fn create_katana_archive(
                     compressed,
                     uncompressed,
                     files: local_files,
-                })
-                .expect("send end");
+                    nonce: nonce_opt,
+                }).expect("send");
             });
         }
         drop(tx);
 
         // coordinator – собирает данные от воркеров
-        let mut pending: Vec<Option<(TempPath, u64, u64, Vec<FileEntry>)>> = (0..num_shards).map(|_| None).collect();
+        let mut pending: Vec<Option<(TempPath, u64, u64, Vec<FileEntry>, Option<[u8; 12]>)>> = (0..num_shards).map(|_| None).collect();
         while let Ok(msg) = rx.recv() {
              let ShardMsg::Done {
                  shard_id,
@@ -205,14 +333,15 @@ pub fn create_katana_archive(
                  compressed,
                  uncompressed,
                  files,
+                 nonce,
              } = msg;
             {
-                pending[shard_id] = Some((tmp_path, compressed, uncompressed, files));
+                pending[shard_id] = Some((tmp_path, compressed, uncompressed, files, nonce));
             }
         }
         // Все shard'ы готовы – копируем в порядке shard_id
         for sid in 0..num_shards {
-            if let Some((path, comp_size, uncomp_size, files)) = pending[sid].take() {
+            if let Some((path, comp_size, uncomp_size, files, nonce)) = pending[sid].take() {
                 let offset = out_file.seek(SeekFrom::End(0)).expect("seek end");
                  let mut tf = File::open(&path).expect("open temp shard");
                 {
@@ -232,7 +361,9 @@ pub fn create_katana_archive(
                     compressed_size: comp_size,
                     uncompressed_size: uncomp_size,
                     file_count: files.len(),
+                    nonce: nonce,
                 });
+
                 files_by_shard[sid] = Some(files);
             }
         }
@@ -252,15 +383,39 @@ pub fn create_katana_archive(
     // 7. Записать индекс + футер
     #[derive(Serialize, Deserialize)]
     struct KatanaIndex {
+        #[serde(default)]
+        crc32: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        hmac: Option<[u8;32]>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        salt: Option<[u8;16]>,
         shards: Vec<ShardInfo>,
         files: Vec<FileEntry>,
     }
 
-    let index = KatanaIndex {
+    let mut index = KatanaIndex {
+        crc32: 0,
+        hmac: None,
+        salt: salt_opt.clone().map(|v| {
+            let arr: [u8;16] = v.try_into().expect("salt size");
+            arr
+        }),
         shards: index_shards,
         files: index_files,
     };
 
+    let index_json = serde_json::to_vec(&index)?;
+    // CRC32
+    let mut crc = Crc32Hasher::new();
+    crc.update(&index_json);
+    index.crc32 = crc.finalize();
+    // HMAC (если шифрование)
+    if let (Some(ref key_arc), Some(_)) = (key_opt, salt_opt.as_ref()) {
+        let mut mac = HmacSha256::new_from_slice(&key_arc[..]).expect("hmac new");
+        mac.update(&index_json);
+        let res = mac.finalize().into_bytes();
+        index.hmac = Some(res.into());
+    }
     let index_json = serde_json::to_vec(&index)?;
     let mut enc = zstd::Encoder::new(Vec::new(), 3)?;
     enc.include_checksum(true).expect("chk");

@@ -28,6 +28,15 @@ Katana implements robust path sanitization to ensure archives can be safely crea
 - **Drive Letter Removal**: Windows drive letters (e.g., `C:`) are stripped during extraction
 - **Path Component Validation**: Ensures all path components are valid on the target system
 
+### Streaming Encryption
+
+Katana применяет потоковое шифрование **AES-256-GCM** непосредственно во время записи данных.
+
+- Каждому шардy соответствует собственный одноразовый nonce (12 байт).
+- Данные шифруются «на лету» через стрим-шифратор без создания временных файлов, поэтому нагрузка на диск и память минимальна.
+- После записи шарда добавляется тег аутентификации (16 байт), который проверяется при извлечении.
+- В футере хранится CRC32 сжатого индекса и HMAC-SHA-256 (ключ выводится из пароля и соли), что гарантирует целостность и подлинность архива.
+
 ## Technical Implementation
 
 Katana archives consist of:

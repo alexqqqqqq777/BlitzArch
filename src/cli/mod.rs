@@ -41,6 +41,14 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         codec_threads: u32,
 
+        /// Максимальный объём памяти, который может использовать BlitzArch.
+        /// Можно задавать:
+        ///   • число в MiB (например `512`)
+        ///   • процент от общей ОЗУ (например `50%`)
+        ///   • отсутствие флага / `0` → безлимит
+        #[arg(long, value_name = "MiB|%")]
+        memory_budget: Option<String>,
+
         /// Disable adaptive compression (enabled by default). Adaptive mode stores incompressible chunks without compression to save time.
         #[arg(long = "no-adaptive", action = clap::ArgAction::SetFalse, default_value_t = true)]
         adaptive: bool,
@@ -74,6 +82,10 @@ pub enum Commands {
         /// `[ADVANCED]` Data compressibility threshold (0.0-1.0) to trigger adaptive store.
         #[arg(long, default_value_t = 0.8, hide = true)]
         adaptive_threshold: f64,
+        
+        /// Show real-time progress during archive creation.
+        #[arg(long)]
+        progress: bool,
     },
 
     /// Extract files from an archive.
@@ -93,6 +105,14 @@ pub enum Commands {
         /// The password for decrypting the archive. If not provided, will try to read from BLITZARCH_PASSWORD or prompt interactively.
         #[arg(long)]
         password: Option<String>,
+
+        /// Strip NUMBER leading components from file names on extraction (like tar --strip-components).
+        #[arg(long, value_name = "NUMBER")]
+        strip_components: Option<u32>,
+        
+        /// Show real-time progress during archive extraction.
+        #[arg(long)]
+        progress: bool,
     },
 
     /// List the contents of an archive without extracting it.
@@ -133,6 +153,36 @@ pub enum WorkerMode {
 /// 1. `--password` command-line argument.
 /// 2. `BLITZARCH_PASSWORD` environment variable.
 /// 3. Returns `Ok(None)` if neither is present, allowing the caller to prompt interactively.
+/// Parse memory budget string into MiB.
+/// Accepts:
+///   • Integer MiB (e.g. "512") → 512
+///   • Percentage (e.g. "50%") → calculates % of total RAM, rounds down to MiB
+/// Returns Ok(None) if input is None or "0".
+pub fn parse_memory_budget_mb(budget_opt: &Option<String>) -> Result<Option<u64>, String> {
+    let Some(raw) = budget_opt else { return Ok(None); };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed == "0" {
+        return Ok(None);
+    }
+    if let Some(percent_idx) = trimmed.strip_suffix('%') {
+        // Percentage mode
+        let pct: u64 = percent_idx.parse().map_err(|_| "invalid percentage")?;
+        if pct == 0 || pct > 100 {
+            return Err("percentage must be 1-100".into());
+        }
+        let mut sys = sysinfo::System::new();
+        sys.refresh_memory();
+        let total_kib = sys.total_memory(); // KiB
+        let total_mib = total_kib / 1024;
+        let budget_mib = total_mib * pct / 100;
+        return Ok(Some(budget_mib));
+    }
+    // numeric MiB
+    let mb: u64 = trimmed.parse().map_err(|_| "invalid memory value")?;
+    if mb == 0 { return Ok(None); }
+    Ok(Some(mb))
+}
+
 pub fn get_password_from_opt_or_env(password_opt: Option<String>) -> Result<Option<String>, std::io::Error> {
     if let Some(pass) = password_opt {
         return Ok(Some(pass));

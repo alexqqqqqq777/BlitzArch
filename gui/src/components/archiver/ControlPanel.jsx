@@ -8,7 +8,7 @@ import { Settings, Lock, Zap, Shield, Gauge, Sparkles } from 'lucide-react';
 
 const PRESETS = {
   fast: { 
-    name: 'Быстро', 
+    name: 'Fast', 
     level: 3, 
     icon: Zap, 
     gradient: 'from-emerald-500 to-teal-500',
@@ -16,7 +16,7 @@ const PRESETS = {
     border: 'border-emerald-500/30'
   },
   balanced: { 
-    name: 'Сбалансированно', 
+    name: 'Balanced', 
     level: 9, 
     icon: Gauge, 
     gradient: 'from-amber-500 to-orange-500',
@@ -24,7 +24,7 @@ const PRESETS = {
     border: 'border-amber-500/30'
   },
   maximum: { 
-    name: 'Максимально', 
+    name: 'Maximum', 
     level: 15, 
     icon: Sparkles, 
     gradient: 'from-violet-500 to-purple-500',
@@ -32,7 +32,7 @@ const PRESETS = {
     border: 'border-violet-500/30'
   },
   encrypted: { 
-    name: 'Зашифровано', 
+    name: 'Encrypted', 
     level: 9, 
     icon: Lock, 
     gradient: 'from-red-500 to-rose-500',
@@ -60,7 +60,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
     <div className="bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-700/50 p-6">
       <div className="flex items-center gap-3 mb-6">
         <Settings className="w-5 h-5 text-slate-400" />
-        <h3 className="text-lg font-semibold text-white">Настройки</h3>
+        <h3 className="text-lg font-semibold text-white">Settings</h3>
       </div>
 
       <div className="space-y-6">
@@ -68,7 +68,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
         {/* Presets */}
         <div>
           <label className="text-sm font-medium text-slate-300 mb-3 block">
-            Пресеты компрессии
+            Compression Presets
           </label>
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(PRESETS).map(([key, preset]) => {
@@ -100,7 +100,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="text-sm font-medium text-slate-300">
-              Уровень сжатия
+              Compression Level
             </label>
             <Badge className="bg-slate-800/50 text-amber-400 border border-amber-500/30">
               {settings.compressionLevel}
@@ -118,8 +118,8 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
           />
           
           <div className="flex justify-between text-xs text-slate-500">
-            <span>Быстро</span>
-            <span>Максимально</span>
+            <span>Fast</span>
+            <span>Maximum</span>
           </div>
         </div>
 
@@ -128,7 +128,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
           <div className="flex items-center justify-between mb-3">
             <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
               <Shield className="w-4 h-4" />
-              Шифрование
+              Encryption
             </label>
             <Switch
               checked={settings.useEncryption}
@@ -142,7 +142,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
               <Input
                 type="password"
-                placeholder="Введите пароль"
+                placeholder="Enter password"
                 value={settings.password}
                 onChange={(e) => updateSetting('password', e.target.value)}
                 disabled={disabled}
@@ -161,7 +161,7 @@ export default function ControlPanel({ settings, onSettingsChange, disabled }) {
             </span>
           </div>
           <p className="text-xs text-slate-300">
-            Уровень {settings.compressionLevel} • {settings.useEncryption ? 'Зашифровано' : 'Без шифрования'}
+            Level {settings.compressionLevel} • {settings.useEncryption ? 'Encrypted' : 'No Encryption'}
           </p>
         </div>
       </div>
