@@ -33,3 +33,7 @@ dirs = "5.0"
 zstd = "0.13"
 blitzarch = { path = "../../" }
 tauri-plugin-dragout = { path = "dragout-plugin" }
+
+# Force core-foundation to latest version to fix Windows build
+# This prevents core-foundation 0.9.4 with std::os::unix::io issues
+core-foundation = "0.10.1"
