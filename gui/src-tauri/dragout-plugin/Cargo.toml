@@ -6,6 +6,11 @@ links = "tauri-plugin-dragout"
 
 [dependencies]
 tauri = "2"
+blitzarch = { path = "../../../" }
+
+# macOS-specific dependencies (Core Foundation, Cocoa framework)
+# These should NOT compile on Windows/Linux to avoid unix::io errors
+[target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 objc_exception = "0.1"
 block2 = "0.5"
@@ -13,8 +18,10 @@ objc2 = { version = "0.5", default-features = false }
 cocoa = "0.26.1"
 once_cell = "1.19"
 dispatch = "0.2"
+
+# Windows-specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.54", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_System_Com"] }
-blitzarch = { path = "../../../" }
 
 [lib]
 crate-type = ["staticlib", "cdylib", "rlib"]
