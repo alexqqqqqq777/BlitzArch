@@ -41,11 +41,11 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         codec_threads: u32,
 
-        /// Максимальный объём памяти, который может использовать BlitzArch.
-        /// Можно задавать:
-        ///   • число в MiB (например `512`)
-        ///   • процент от общей ОЗУ (например `50%`)
-        ///   • отсутствие флага / `0` → безлимит
+        /// Maximum memory budget for BlitzArch operations.
+        /// Supported formats:
+        ///   • Number in MiB (e.g., `512`)
+        ///   • Percentage of total RAM (e.g., `50%`)
+        ///   • Omit flag or use `0` for unlimited
         #[arg(long, value_name = "MiB|%")]
         memory_budget: Option<String>,
 

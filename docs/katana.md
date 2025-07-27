@@ -30,12 +30,12 @@ Katana implements robust path sanitization to ensure archives can be safely crea
 
 ### Streaming Encryption
 
-Katana применяет потоковое шифрование **AES-256-GCM** непосредственно во время записи данных.
+Katana applies **AES-256-GCM** streaming encryption while data is written to the archive.
 
-- Каждому шардy соответствует собственный одноразовый nonce (12 байт).
-- Данные шифруются «на лету» через стрим-шифратор без создания временных файлов, поэтому нагрузка на диск и память минимальна.
-- После записи шарда добавляется тег аутентификации (16 байт), который проверяется при извлечении.
-- В футере хранится CRC32 сжатого индекса и HMAC-SHA-256 (ключ выводится из пароля и соли), что гарантирует целостность и подлинность архива.
+- Each shard receives its own one-time 12-byte nonce.
+- Data is encrypted on-the-fly using a stream cipher, eliminating temporary files and minimizing disk and memory overhead.
+- After a shard is written, a 16-byte authentication tag is appended and later validated during extraction.
+- The footer stores the CRC32 of the compressed index and an HMAC-SHA-256 (key derived from the password and salt) to guarantee archive integrity and authenticity.
 
 ## Technical Implementation
 

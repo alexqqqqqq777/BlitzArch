@@ -1,6 +1,6 @@
 ## Default Permission
 
-Разрешения по умолчанию для плагина dragout, включающие команду native_drag_out.
+Default permissions for the drag-out plugin, including the `native_drag_out` command.
 
 #### This default permission set includes the following:
 
