@@ -19,13 +19,13 @@ import {
 const COMPRESSION_PROFILES = {
   balanced: { 
     name: 'Fast', 
-    level: 3,                    // README default level
+    level: -3,                   // Fast profile: zstd fast=3 (-3)
     icon: Gauge, 
     color: 'from-teal-400 to-cyan-500',
     desc: 'Fast default compression',
-    bundleSize: 0,              // Auto bundle size
-    threads: 0,                 // Auto threads
-    codecThreads: 0,            // Auto codec threads
+
+    threads: 32,                 // Fixed 32 threads
+    codecThreads: 16,            // Fixed 16 codec threads
     useEncryption: false,
     memoryBudget: 0
   },
@@ -35,7 +35,7 @@ const COMPRESSION_PROFILES = {
     icon: Sparkles, 
     color: 'from-purple-400 to-pink-500',
     desc: 'Balanced compression',
-    bundleSize: 64,             // Larger bundles for better ratio
+
     threads: 0,                 // Auto threads
     codecThreads: 0,            // Auto codec threads
     useEncryption: false,
@@ -47,7 +47,7 @@ const COMPRESSION_PROFILES = {
     icon: Zap, 
     color: 'from-yellow-400 to-orange-500',
     desc: 'Best compression, slower speed',
-    bundleSize: 128,            // Largest bundles for maximum ratio
+
     threads: 0,                 // Auto threads
     codecThreads: 0,            // Auto codec threads
     useEncryption: false,
@@ -59,7 +59,7 @@ const COMPRESSION_PROFILES = {
     icon: Shield, 
     color: 'from-red-400 to-rose-500',
     desc: 'AES-256 encrypted archive',
-    bundleSize: 32,             // Standard bundle size
+
     threads: 0,                 // Auto threads
     codecThreads: 0,            // Auto codec threads
     useEncryption: true,         // Force encryption for secure profile
@@ -78,7 +78,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
     // Apply all profile parameters at once
     updateSetting('preset', profile);
     updateSetting('compressionLevel', profileConfig.level);
-    updateSetting('bundleSize', profileConfig.bundleSize);
+
     updateSetting('threads', profileConfig.threads);
     updateSetting('memoryBudget', profileConfig.memoryBudget);
     updateSetting('codecThreads', profileConfig.codecThreads);
@@ -94,7 +94,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
   // Determine if manual changes were made on top of profile
   const isModified = (
     settings.compressionLevel !== currentProfile.level ||
-    settings.bundleSize !== currentProfile.bundleSize ||
+
     settings.memoryBudget !== currentProfile.memoryBudget ||
     settings.threads !== currentProfile.threads ||
     settings.codecThreads !== currentProfile.codecThreads ||
@@ -170,7 +170,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
               value={[settings.compressionLevel]}
               onValueChange={(value) => updateSetting('compressionLevel', value[0])}
               max={22}
-              min={1}
+              min={-7}
               step={1}
               disabled={disabled}
               className="mb-2"
@@ -203,26 +203,7 @@ export default function ControlDashboard({ settings, onSettingsChange, disabled 
             </div>
           </div>
 
-          {/* Bundle Size Control */}
-          <div>
-            <label className="text-xs text-neutral-400 mb-2 block">
-              Bundle Size: {settings.bundleSize} MiB
-            </label>
-            <Slider
-              value={[settings.bundleSize]}
-              onValueChange={(value) => updateSetting('bundleSize', value[0])}
-              max={256}
-              min={8}
-              step={8}
-              disabled={disabled}
-              className="mb-2"
-            />
-            <div className="flex justify-between text-[10px] text-neutral-500">
-              <span>Small (8)</span>
-              <span>Medium (32)</span>
-              <span>Large (256)</span>
-            </div>
-          </div>
+
 
           {/* Thread Control */}
           <div className="grid grid-cols-2 gap-3">

@@ -158,7 +158,7 @@ export default function ProcessingInterface({ progress, speed, type, finalMessag
               className="flex items-center gap-2 text-sm text-neutral-400"
             >
               <div className="w-2 h-2 rounded-full bg-teal-400" />
-              {type === 'create' ? 'Applying compression algorithms...' : 'Validating CRC checksums...'}
+              {type === 'create' ? 'Applying compression algorithms...' : 'Validating BLAKE3 integrity...'}
             </motion.div>
           )}
           

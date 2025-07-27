@@ -202,6 +202,26 @@ export default function ResultModal({ isOpen, onClose, result }) {
               </button>
             </div>
 
+            {/* Integrity Check */}
+            {result.integrityOk !== undefined && result.integrityOk !== null && (
+              <div className="mb-6 flex items-center gap-3">
+                {result.integrityOk ? (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                    <Shield className="w-4 h-4" />
+                    <span>Integrity verified</span>
+                    {result.blake3 && (
+                      <span className="font-mono text-xs text-neutral-400 truncate max-w-xs">{result.blake3}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-400 text-sm">
+                    <Shield className="w-4 h-4" />
+                    <span>Integrity check failed</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Details */}
             {stats && (
               <div className="grid grid-cols-2 gap-4 mb-6">

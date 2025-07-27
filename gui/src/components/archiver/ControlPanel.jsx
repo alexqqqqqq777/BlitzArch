@@ -9,7 +9,7 @@ import { Settings, Lock, Zap, Shield, Gauge, Sparkles } from 'lucide-react';
 const PRESETS = {
   fast: { 
     name: 'Fast', 
-    level: 3, 
+    level: -3, 
     icon: Zap, 
     gradient: 'from-emerald-500 to-teal-500',
     bgGradient: 'from-emerald-500/20 to-teal-500/20',

@@ -19,10 +19,11 @@ class TauriBlitzArchEngine {
     const {
       compressionLevel = 3,
       password = null,
-      bundleSize = 32,
+
       threads = null,
       codecThreads = 0,
-      memoryBudget = 0
+      memoryBudget = 0,
+      skip_check = false
     } = options;
 
     console.log('🎯 Tauri Archive Creation:');
@@ -35,21 +36,28 @@ class TauriBlitzArchEngine {
     try {
       // Call Tauri async command for non-blocking operation
       const outputPath = `${outputDir}/${archiveName}.blz`;
-      const result = await invoke('create_archive_async', {
+      // Build parameters object dynamically to avoid sending zero memoryBudget
+      const params = {
+        // Integrity check flag - send both camelCase and snake_case for compatibility
+        skipCheck: skip_check,
+        skip_check: skip_check,
         inputs: files,
         outputPath: outputPath,
         output_path: outputPath,
         compressionLevel: compressionLevel,
         compression_level: compressionLevel,
-        bundleSize: bundleSize,
-        bundle_size: bundleSize,
         password: password,
         threads: threads, // null -> auto thread selection
         codecThreads: codecThreads,
         codec_threads: codecThreads,
-        memoryBudget: memoryBudget,
-        memory_budget: memoryBudget
-      });
+      };
+      if (memoryBudget && memoryBudget > 0) {
+        params.memoryBudget = memoryBudget;
+        params.memory_budget = memoryBudget;
+      }
+
+      console.log('🚀 DEBUG: Invoking Tauri create_archive_async with params:', params);
+      const result = await invoke('create_archive_async', params);
 
       console.log('✅ Tauri command result:', result);
 
@@ -58,7 +66,9 @@ class TauriBlitzArchEngine {
           success: true,
           output: result.output,
           archivePath: result.archive_path,
-          stats: result.stats || null
+          stats: result.stats || null,
+          integrityOk: result.integrity_ok ?? null,
+          blake3: result.blake3_hex ?? null
         };
       } else {
         return {

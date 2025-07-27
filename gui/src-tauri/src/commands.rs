@@ -20,7 +20,8 @@ use tauri::Emitter;
 
 
 // Import BlitzArch engine functions and types
-use blitzarch::katana::{create_katana_archive_with_progress, extract_katana_archive_with_progress};
+use blitzarch::katana_stream::create_katana_archive_with_progress;
+use blitzarch::katana::extract_katana_archive_with_progress;
 use blitzarch::progress::ProgressState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,7 +34,7 @@ pub struct ArchiveStats {
     pub archive_bytes: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ArchiveResult {
     pub success: bool,
     pub output: Option<String>,
@@ -41,6 +42,10 @@ pub struct ArchiveResult {
     pub archive_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stats: Option<ArchiveStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integrity_ok: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blake3_hex: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -120,8 +125,9 @@ pub async fn create_archive_async(
     app: AppHandle,
     inputs: Vec<String>,
     output_path: String,
-    compression_level: u32,
-    bundle_size: Option<u64>,
+    compression_level: i32,
+    skip_check: bool,
+
     password: Option<String>,
     threads: Option<usize>,
     codec_threads: Option<u32>,
@@ -138,7 +144,8 @@ pub async fn create_archive_async(
             inputs_clone,
             output_path_clone,
             compression_level,
-            bundle_size,
+            skip_check,
+
             password,
             threads,
             codec_threads,
@@ -151,14 +158,27 @@ fn create_archive_with_real_progress(
     app: AppHandle,
     inputs: Vec<String>,
     output_path: String,
-    _compression_level: u32,
-    _bundle_size: Option<u64>,
+    compression_level: i32,
+    skip_check: bool,
+
     password: Option<String>,
     threads: Option<usize>,
     codec_threads: Option<u32>,
     memory_budget: Option<u64>,
 ) -> Result<ArchiveResult, String> {
     println!("🚀 Creating archive async: {}", output_path);
+    
+    if skip_check {
+        // user opted out of integrity verification
+    }
+
+
+    // Apply memory budget to engine via environment variable only if > 0
+    if let Some(mb) = memory_budget {
+        if mb > 0 {
+            std::env::set_var("BLITZ_MEM_BUDGET_MB", mb.to_string());
+        }
+    }
     
     let password = normalize_password(password);
     
@@ -188,11 +208,10 @@ fn create_archive_with_real_progress(
     
     // Convert string paths to PathBuf
     let input_paths: Vec<std::path::PathBuf> = inputs.iter().map(|s| std::path::PathBuf::from(s)).collect();
-    let output_pathbuf = std::path::PathBuf::from(&output_path);
     
     // Store last progress state for final stats
     let last_progress_state = std::sync::Arc::new(std::sync::Mutex::new(None::<ProgressState>));
-    let last_progress_clone = last_progress_state.clone();
+    let _last_progress_clone = last_progress_state.clone();
     
     // Create progress callback
     let app_for_progress = app.clone();
@@ -234,6 +253,8 @@ let result = create_katana_archive_with_progress(
         codec_threads.unwrap_or(0),
         memory_budget,
         password,
+        Some(compression_level),
+        skip_check,
         Some(progress_callback),
     );
     
@@ -345,6 +366,7 @@ let result = create_katana_archive_with_progress(
                 error: None,
                 archive_path: Some(output_path.clone()),
                 stats: Some(final_stats),
+                ..Default::default()
             })
         }
         Err(e) => {
@@ -376,6 +398,7 @@ let result = create_katana_archive_with_progress(
                 error: Some(error_msg),
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             })
         }
     }
@@ -444,6 +467,7 @@ let archive_path = archive_pathbuf.to_string_lossy().to_string();
                     error: None,
                     archive_path: Some(archive_path),
                     stats: None,
+                ..Default::default()
                 })
             } else {
                 println!("❌ Archive creation failed: {}", stderr);
@@ -453,6 +477,7 @@ let archive_path = archive_pathbuf.to_string_lossy().to_string();
                     error: Some(stderr.to_string()),
                     archive_path: None,
                     stats: None,
+                ..Default::default()
                 })
             }
         }
@@ -720,6 +745,7 @@ fn extract_archive_with_real_progress(
                 error: None,
                 archive_path: Some(archive_path),
                 stats: Some(final_stats),
+                ..Default::default()
             })
         }
         Err(e) => {
@@ -751,6 +777,7 @@ fn extract_archive_with_real_progress(
                 error: Some(error_msg),
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             })
         }
     }
@@ -804,6 +831,7 @@ pub fn extract_archive(
                     error: None,
                     archive_path: None,
                 stats: None,
+                ..Default::default()
                 })
             } else {
                 println!("❌ Archive extraction failed: {}", stderr);
@@ -813,6 +841,7 @@ pub fn extract_archive(
                     error: Some(stderr.to_string()),
                     archive_path: None,
                 stats: None,
+                ..Default::default()
                 })
             }
         }
@@ -849,6 +878,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
                     error: None,
                     archive_path: None,
                 stats: None,
+                ..Default::default()
                 })
             } else {
                 println!("❌ Archive listing failed: {}", stderr);
@@ -858,6 +888,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
                     error: Some(stderr.to_string()),
                     archive_path: None,
                 stats: None,
+                ..Default::default()
                 })
             }
         }
@@ -889,6 +920,7 @@ pub async fn drag_out_extract(
             error: Some(format!("Failed to create target directory: {}", e)),
             archive_path: None,
                 stats: None,
+                ..Default::default()
         });
     }
     
@@ -928,6 +960,7 @@ let extracted_file_path = unique_dest.to_string_lossy().to_string();
                 error: Some(e),
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             })
         }
     }
@@ -937,8 +970,8 @@ let extracted_file_path = unique_dest.to_string_lossy().to_string();
 #[tauri::command]
 pub fn create_link_file(path: String, contents: String) -> Result<ArchiveResult, String> {
     match fs::write(&path, contents) {
-        Ok(_) => Ok(ArchiveResult { success: true, output: Some(path.clone()), error: None, archive_path: Some(path), stats: None }),
-        Err(e) => Ok(ArchiveResult { success: false, output: None, error: Some(e.to_string()), archive_path: None, stats: None }),
+        Ok(_) => Ok(ArchiveResult { success: true, output: Some(path.clone()), error: None, archive_path: Some(path), stats: None, ..Default::default() }),
+        Err(e) => Ok(ArchiveResult { success: false, output: None, error: Some(e.to_string()), archive_path: None, stats: None, ..Default::default() }),
     }
 }
 
@@ -955,6 +988,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             error: None,
             archive_path: None,
                 stats: None,
+                ..Default::default()
         });
     }
 
@@ -998,6 +1032,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
                 error: Some(format!("Failed to read dir: {}", e)),
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             });
         }
     }
@@ -1009,6 +1044,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             error: None,
             archive_path: None,
                 stats: None,
+                ..Default::default()
         })
     } else {
         Ok(ArchiveResult {
@@ -1017,6 +1053,7 @@ pub fn cleanup_drag_out_temp(temp_dir: String, max_age_hours: Option<u64>) -> Re
             error: Some(errors.join("; ")),
             archive_path: None,
                 stats: None,
+                ..Default::default()
         })
     }
 }
@@ -1035,6 +1072,7 @@ pub fn delete_file(file_path: String) -> Result<ArchiveResult, String> {
                 error: None,
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             })
         }
         Err(e) => {
@@ -1045,6 +1083,7 @@ pub fn delete_file(file_path: String) -> Result<ArchiveResult, String> {
                 error: Some(e.to_string()),
                 archive_path: None,
                 stats: None,
+                ..Default::default()
             })
         }
     }

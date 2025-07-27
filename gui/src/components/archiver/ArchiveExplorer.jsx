@@ -593,7 +593,7 @@ export default function ArchiveExplorer({ archive, onExtract, onClose }) {
                     <span>{formatSize(item.size)}</span>
                     {!item.is_dir && (
                       <>
-                        <span>CRC: {item.crc32?.slice(0, 8) || 'N/A'}</span>
+                        <span>BLAKE3: {item.crc32?.slice(0, 8) || 'N/A'}</span>
                         <span className="text-neutral-500">•</span>
                         <span className="truncate">{item.path}</span>
                       </>

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::error::Error;
 
-
+// --- crossbeam_channel ---------------------------------------------------
 use crossbeam_channel::{bounded, Receiver, Sender};
 use num_cpus;
 use rayon::prelude::*;
@@ -41,12 +41,17 @@ struct ShardInfo {
     compressed_size: u64,
     uncompressed_size: u64,
     file_count: usize,
+    crc32: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<[u8; 12]>,
 }
 
 
 const KATANA_MAGIC: &[u8; 8] = b"KATIDX01";
+// --- Footer integrity --------------------------------------------------
+// 16-байтная подпись + 8-байт длина данных + 32-байтный BLAKE3
+const FOOTER_MAGIC: &[u8; 16] = b"KATANA_HASH_FOOT"; // 16 bytes
+const FOOTER_SIZE: usize = 16 + 8 + 32; // 56 байт
 
 const FLUSH_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
 const MAX_INFLIGHT: usize = 3; // количество буферов в канале
@@ -111,48 +116,65 @@ fn split_even<T: Clone>(list: &[T], parts: usize) -> Vec<Vec<T>> {
 
 /// Основная функция создания архива Katana в «гибрид-стрим» режиме
 use std::time::Instant;
+use crate::autotune::{AutoTuner, CompressionStats};
 
-pub fn create_katana_archive(
+pub fn create_katana_archive<F>(
     inputs: &[PathBuf],
     output_path: &Path,
     threads: usize,
     mut codec_threads: u32,
-    level: i32,
+    mem_budget_mb: Option<u64>,
     password: Option<String>,
-) -> Result<(), Box<dyn Error>> {
-    // ---------------- Adaptive codec threads by memory budget -----------------
-    // If codec_threads == 0, interpret as "auto under memory budget".
-    if codec_threads == 0 {
-        const MAX_INFLIGHT_LOCAL: u64 = MAX_INFLIGHT as u64;
-        // read memory budget from env (MiB). "0" or missing -> unlimited
-        let budget_bytes = std::env::var("BLITZ_MEM_BUDGET_MB")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .filter(|&mb| mb > 0)
-            .map(|mb| mb * 1024 * 1024)
-            .unwrap_or(u64::MAX);
+    compression_level: Option<i32>,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(crate::progress::ProgressState) + Send + Sync + 'static,
+{
+    // NOTE: actual implementation continues below
 
-        // simple heuristic: est mem per thread depends on level
-        let est_mem_per_thread = match level {
-            0..=4 => 32 * 1024 * 1024u64,    // 32 MiB
-            5..=8 => 64 * 1024 * 1024u64,    // 64 MiB
-            _ => 128 * 1024 * 1024u64,       // 128 MiB
-        } + 2 * 1024 * 1024u64; // +input buffer
 
-        // consider global inflight factor and extra 8 MiB buffer
-        let mem_per_shard_threads = est_mem_per_thread * MAX_INFLIGHT_LOCAL;
-        let mut max_threads_by_mem = if budget_bytes == u64::MAX {
-            num_cpus::get() as u32
-        } else {
-            ((budget_bytes.saturating_sub(8 * 1024 * 1024)) / mem_per_shard_threads) as u32
-        };
-        if max_threads_by_mem == 0 { max_threads_by_mem = 1; }
-        let cpu_cores = num_cpus::get() as u32;
-        codec_threads = std::cmp::min(max_threads_by_mem, cpu_cores);
-        if codec_threads == 0 { codec_threads = 1; }
-        // Safety cap: don't spawn more than 8 codec threads – diminishing returns
-        codec_threads = codec_threads.min(8);
+
+    // ---------------- Adaptive AutoTuner initialization -----------------
+    // Initialize AutoTuner with memory budget
+    let memory_budget = mem_budget_mb
+        .map(|mb| mb as usize * 1024 * 1024)  // Convert MiB to bytes
+        .unwrap_or_else(|| {
+            // Default: 70% of available system memory
+            use sysinfo::System;
+            let mut sys = System::new();
+            sys.refresh_memory();
+            (sys.total_memory() as f64 * 0.7) as usize
+        });
+    
+    let mut autotune = AutoTuner::new(memory_budget);
+    
+    // Get initial configuration
+    // Получаем конфигурацию от AutoTune
+    let mut current_config = autotune.tune(None);
+    // Защита от нулевого размера буфера (приводит к пустым шардам)
+    if current_config.input_buffer_size == 0 {
+        // Минимум 256 КиБ для гарантированного чтения
+        current_config.input_buffer_size = 256 * 1024;
     }
+    
+    // Override parameters with AutoTune recommendations
+    if codec_threads == 0 {
+        codec_threads = current_config.codec_threads as u32;
+    }
+    
+    // Use passed compression level or fall back to AutoTune's recommendation
+    let compression_level = compression_level.unwrap_or(current_config.compression_level);
+    
+    // Clone config before rayon::scope to avoid borrowing issues
+    let config_clone = current_config.clone();
+    
+    println!("[AutoTune] Initial config: threads={}, codec_threads={}, compression_level={}, estimated_memory={}MB, input_buffer={}KB",
+             current_config.thread_count, 
+             current_config.codec_threads,
+             current_config.compression_level,
+             current_config.estimated_total_memory / (1024 * 1024),
+             current_config.input_buffer_size / 1024);
     // Подготовка шифрования (генерация соли/ключа) при наличии пароля
     if password.is_some() {
         /* fallback удалён – теперь поддерживаем потоковое шифрование напрямую */
@@ -173,19 +195,20 @@ let start_ts = Instant::now();
         if path.is_file() {
             files.push(path.clone());
         } else if path.is_dir() {
-            for e in WalkDir::new(path) {
-                let e = e?;
-                if e.file_type().is_file() {
-                    files.push(e.path().to_path_buf());
+            for entry in WalkDir::new(path) {
+                let entry = entry?;
+                if entry.file_type().is_file() {
+                    files.push(entry.path().to_path_buf());
                 }
             }
         }
     }
+
     if files.is_empty() {
         return Err("No input files".into());
     }
 
-    let num_shards = if threads == 0 { num_cpus::get() } else { threads }.max(1);
+     let num_shards = if threads == 0 { num_cpus::get() } else { threads }.max(1);
     println!(
         "[katana] Compressing {} files with {} shards → {}",
         files.len(), num_shards, output_path.display()
@@ -198,12 +221,7 @@ let start_ts = Instant::now();
 
     let file_chunks: Vec<Vec<PathBuf>> = split_even(&files, num_shards);
 
-    // 3. Открыть выходной файл
-    let mut out_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(output_path)?;
+    // 3. Выходной файл откроем позже, после завершения всех воркеров
 
     // 4. Каналы для обмена
     let (tx, rx): (Sender<ShardMsg>, Receiver<ShardMsg>) = bounded(MAX_INFLIGHT);
@@ -214,6 +232,15 @@ let start_ts = Instant::now();
     // Temporary storage to keep deterministic order
     let mut shard_infos: Vec<Option<ShardInfo>> = vec![None; num_shards];
     let mut files_by_shard: Vec<Option<Vec<FileEntry>>> = vec![None; num_shards];
+    
+    // Progress tracking state
+    let total_files = files.len();
+    let mut completed_shards = 0;
+    let mut processed_files = 0;
+    let mut processed_bytes = 0u64;
+    let total_bytes: u64 = files.iter()
+        .map(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0))
+        .sum();
     
 
     // 6. Параллельное сжатие – каждый воркер пишет в temp-файл
@@ -241,12 +268,12 @@ let start_ts = Instant::now();
                     let mut sink = EncryptSink::new(&mut outfile, &*key_arc, nonce);
                     let zstd_threads: u32 = codec_threads; // 0 ⇒ однопоточный zstd
                     {
-                        let mut encoder = zstd::Encoder::new(&mut sink, level).expect("enc");
+                        let mut encoder = zstd::Encoder::new(&mut sink, compression_level).expect("enc");
                         encoder.include_checksum(true).expect("chk");
                         if zstd_threads > 1 {
                             encoder.multithread(zstd_threads).expect("mt");
                         }
-                        let mut in_buf = vec![0u8; 2 << 20]; // 2 MiB
+                        let mut in_buf = vec![0u8; config_clone.input_buffer_size]; // Adaptive buffer
                         for path in &chunk {
                             let mut f = File::open(path).expect("open");
                             let meta = f.metadata().expect("meta");
@@ -277,12 +304,12 @@ let start_ts = Instant::now();
                     let (_n, _bytes) = sink.finalize().expect("finalize");
                 } else {
                     let zstd_threads: u32 = codec_threads; // 0 ⇒ однопоточный zstd
-                    let mut encoder = zstd::Encoder::new(&mut outfile, level).expect("enc");
+                    let mut encoder = zstd::Encoder::new(&mut outfile, compression_level).expect("enc");
                     encoder.include_checksum(true).expect("chk");
                     if zstd_threads > 1 {
                             encoder.multithread(zstd_threads).expect("mt");
                         }
-                    let mut in_buf = vec![0u8; 2 << 20];
+                    let mut in_buf = vec![0u8; config_clone.input_buffer_size]; // Adaptive buffer
                     for path in &chunk {
                         let mut f = File::open(path).expect("open");
                         let meta = f.metadata().expect("meta");
@@ -336,14 +363,52 @@ let start_ts = Instant::now();
                  nonce,
              } = msg;
             {
+                // Update progress tracking (capture file count before moving)
+                let file_count = files.len();
+                completed_shards += 1;
+                processed_files += file_count;
+                processed_bytes += uncompressed;
+                
                 pending[shard_id] = Some((tmp_path, compressed, uncompressed, files, nonce));
+                
+                // Call progress callback if provided
+                if let Some(ref callback) = progress_callback {
+                    let progress_percent = (completed_shards as f64 / num_shards as f64) * 100.0;
+                    let elapsed = start_ts.elapsed();
+                    let speed_mbps = if elapsed.as_secs_f64() > 0.0 {
+                        (processed_bytes as f64 / (1024.0 * 1024.0)) / elapsed.as_secs_f64()
+                    } else {
+                        0.0
+                    };
+                    
+                    let progress_state = crate::progress::ProgressState {
+                        progress_percent: progress_percent as f32,
+                        speed_mbps: speed_mbps as f32,
+                        processed_files: processed_files as u64,
+                        total_files: total_files as u64,
+                        processed_bytes,
+                        total_bytes,
+                        completed_shards: completed_shards as u32,
+                        total_shards: num_shards as u32,
+                        elapsed_time: elapsed,
+                    };
+                    
+                    callback(progress_state);
+                }
             }
         }
         // Все shard'ы готовы – копируем в порядке shard_id
         for sid in 0..num_shards {
             if let Some((path, comp_size, uncomp_size, files, nonce)) = pending[sid].take() {
+                // Открываем выходной файл в режиме append
+                let mut out_file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .read(true)
+                    .open(output_path)
+                    .expect("open output for append");
                 let offset = out_file.seek(SeekFrom::End(0)).expect("seek end");
-                 let mut tf = File::open(&path).expect("open temp shard");
+                let mut tf = File::open(&path).expect("open temp shard");
                 {
                     // large buffered copy (8 MiB)
                     let mut buf = vec![0u8; 8 * 1024 * 1024];
@@ -356,11 +421,23 @@ let start_ts = Instant::now();
                     }
                 }
 
+                // Посчитаем CRC32 сжатого шарда
+                let mut crc32 = crc32fast::Hasher::new();
+                {
+                    let mut tf_verify = File::open(&path).expect("open shard for crc");
+                    let mut buf_crc = vec![0u8; 8 * 1024 * 1024];
+                    loop {
+                        let n = tf_verify.read(&mut buf_crc).expect("read for crc");
+                        if n == 0 { break; }
+                        crc32.update(&buf_crc[..n]);
+                    }
+                }
                 shard_infos[sid] = Some(ShardInfo {
                     offset: offset as u64,
                     compressed_size: comp_size,
                     uncompressed_size: uncomp_size,
                     file_count: files.len(),
+                    crc32: crc32.finalize(),
                     nonce: nonce,
                 });
 
@@ -423,6 +500,13 @@ let start_ts = Instant::now();
     let index_comp = enc.finish()?;
 
     let index_comp_size = index_comp.len() as u64;
+
+        // Открываем файл для записи индекса и футера
+        let mut out_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .append(true)
+            .open(output_path)?;
     let index_json_size = index_json.len() as u64;
 
     out_file.write_all(&index_comp)?;
@@ -430,10 +514,32 @@ let start_ts = Instant::now();
     out_file.write_all(&index_json_size.to_le_bytes())?;
     out_file.write_all(KATANA_MAGIC)?;
 
+    // --- Write footer (BLAKE3 over all previous bytes) -----------------
+    use std::io::Seek;
+    let data_len = out_file.seek(SeekFrom::End(0))?; // длина данных без футера
+    out_file.flush()?; // гарантируем запись на диск, данные в page-cache
+
+    // Рассчитываем хэш, читая из того же файла (page-cache ➜ почти бесплатно)
+    out_file.seek(SeekFrom::Start(0))?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = out_file.read(&mut buf)?;
+        if n == 0 { break; }
+        hasher.update(&buf[..n]);
+    }
+    let hash = hasher.finalize();
+
+    // Вернуться в конец и дописать футер
+    out_file.seek(SeekFrom::Start(data_len))?;
+    out_file.write_all(FOOTER_MAGIC)?;
+    out_file.write_all(& (data_len as u64).to_le_bytes())?;
+    out_file.write_all(hash.as_bytes())?;
+
     // --- Final stats & pretty log ---
     let total_comp_size: u64 = index_comp_size
         + index.shards.iter().map(|s| s.compressed_size).sum::<u64>()
-        + 24; // footer
+        + FOOTER_SIZE as u64;
     let total_uncomp_size: u64 = index.files.iter().map(|f| f.size).sum();
     let ratio = if total_comp_size > 0 {
         total_uncomp_size as f64 / total_comp_size as f64
@@ -447,7 +553,7 @@ let start_ts = Instant::now();
         0.0
     };
     println!(
-        "[katana] Archive complete | Files: {} | Shards: {} | Size: {:.2} → {:.2} MiB (ratio {:.2}x) | CRC: on | Time: {:.2}s | ⏩ {:.1} MB/s",
+        "[katana] Archive complete | Files: {} | Shards: {} | Size: {:.2} → {:.2} MiB (ratio {:.2}x) | BLAKE3: on | Time: {:.2}s | ⏩ {:.1} MB/s",
         index.files.len(),
         index.shards.len(),
         total_uncomp_size as f64 / (1024.0 * 1024.0),
@@ -456,6 +562,93 @@ let start_ts = Instant::now();
         duration.as_secs_f64(),
         throughput,
     );
+    println!(
+        "[CREATE] [████████████] 100.0% | {}/{} files | {:.1} MB/s | {:.2}s",
+        index.files.len(),
+        index.files.len(),
+        throughput,
+        duration.as_secs_f64()
+    );
 
+    Ok(())
+}
+
+/// Creates a Katana archive with optional progress tracking.
+///
+/// This thin wrapper delegates to `create_katana_archive` and, если указан
+/// `progress_callback`, отправляет финальное событие 100 %.
+#[allow(clippy::too_many_arguments)]
+pub fn create_katana_archive_with_progress<F>(
+    inputs: &[PathBuf],
+    output_path: &Path,
+    threads: usize,
+    codec_threads: u32,
+    mem_budget_mb: Option<u64>,
+    password: Option<String>,
+    compression_level: Option<i32>,
+    skip_check: bool,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(crate::progress::ProgressState) + Send + Sync + 'static,
+{
+    // Delegate to main implementation with progress callback
+    create_katana_archive(inputs, output_path, threads, codec_threads, mem_budget_mb, password, compression_level, progress_callback)?;
+
+    // Conditional paranoid integrity check (secure by default)
+    if !skip_check {
+        // Perform paranoid integrity check (default secure behavior)
+        if let Err(e) = perform_paranoid_check(output_path) {
+            return Err(e);
+        }
+    } else {
+        // User opted out of integrity verification
+        println!("[paranoid] Integrity check SKIPPED by user request");
+    }
+
+
+
+    Ok(())
+}
+// -----------------------------------------------------------------------------
+// Полная проверка целостности: читаем футер, пересчитываем BLAKE3
+pub fn perform_paranoid_check(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{Read, Seek};
+    let mut f = std::fs::File::open(path)?;
+    let file_len = f.metadata()?.len();
+    if file_len < FOOTER_SIZE as u64 {
+        return Err("File too small for footer".into());
+    }
+    // Читать футер
+    f.seek(SeekFrom::End(-(FOOTER_SIZE as i64)))?;
+    let mut footer = [0u8; FOOTER_SIZE];
+    f.read_exact(&mut footer)?;
+    // Проверить MAGIC
+    if &footer[..16] != FOOTER_MAGIC {
+        return Err("Footer magic mismatch".into());
+    }
+    let data_len = u64::from_le_bytes(footer[16..24].try_into().unwrap());
+    if data_len + FOOTER_SIZE as u64 != file_len {
+        return Err("Footer length mismatch".into());
+    }
+    let stored_hash = &footer[24..];
+
+    // Рассчитать хэш заново
+    f.seek(SeekFrom::Start(0))?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = [0u8; 8192];
+    let mut remaining = data_len;
+    while remaining > 0 {
+        let to_read = std::cmp::min(remaining, buf.len() as u64) as usize;
+        f.read_exact(&mut buf[..to_read])?;
+        hasher.update(&buf[..to_read]);
+        remaining -= to_read as u64;
+    }
+    let calc_hash = hasher.finalize();
+    if calc_hash.as_bytes() != stored_hash {
+        let _ = std::fs::remove_file(path);
+        return Err("Paranoid integrity check failed: hash mismatch".into());
+    }
+    println!("[paranoid] Integrity verified, BLAKE3 = {}", calc_hash.to_hex());
     Ok(())
 }

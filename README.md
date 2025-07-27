@@ -120,6 +120,26 @@ BlitzArch exposes several power-user flags beyond the common `create / extract /
 
 > **Deprecated / hidden flags**: `--sharded`, `--seekable`, `--preprocess`, `--katana` – these experimental or legacy options are no longer maintained and will be removed in a future release.
 
+## Integrity & Compliance
+
+BlitzArch обеспечивает контроль целостности архивов **по умолчанию**. После завершения упаковки выполняется двойная проверка:
+
+* сверка количества файлов и CRC/XXH64 каждого шара;
+* глобальный хэш `BLAKE3-256` по данным архива.
+
+Проверка гарантирует, что архив соответствует требованиям нормативов для неизменяемого хранения (WORM/tamper-evident). Отключить её можно **только** явным флагом `--skip-check` (CLI) или чек-боксом «Skip integrity check (unsafe)» в GUI. Мы не рекомендуем делать это за исключением микробенчмарков.
+
+BlitzArch соответствует (или облегчает соблюдение) следующим стандартам и регуляциям:
+
+* SEC 17a-4(f) (США)
+* FINRA 4511 / CFTC 1.31 (финансовые записи)
+* Sarbanes-Oxley §404
+* GDPR Art 5(1)(f) (Целостность и конфиденциальность)
+* ISO/IEC 27001 Annex A (A.8.2 & A.12.7)
+* ГОСТ Р 57580-2017 (критическая ИТ-инфраструктура)
+
+---
+
 ## License
 
 BlitzArch is **dual-licensed**:

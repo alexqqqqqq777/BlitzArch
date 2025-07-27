@@ -124,6 +124,7 @@ struct ShardInfo {
     uncompressed_size: u64,
     /// The number of files contained within this shard.
     file_count: usize,
+    crc32: u32,
     /// 12-byte AES-GCM nonce; `None` ⇒ shard not encrypted.
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<[u8; 12]>,
@@ -211,7 +212,17 @@ pub fn create_katana_archive(
     threads: usize,
     password: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
-    create_katana_archive_with_progress(inputs, output_path, threads, 0, None, password, None::<fn(ProgressState)>)
+    // Call new katana_stream implementation with default parameters
+    crate::katana_stream::create_katana_archive(
+        inputs, 
+        output_path, 
+        threads, 
+        0, // codec_threads - auto
+        None, // mem_budget_mb - auto
+        password, 
+        None, // compression_level - auto
+        None::<fn(crate::progress::ProgressState)>, // no progress callback
+    )
 }
 
 /// Creates a new Katana archive with optional progress tracking.
@@ -371,7 +382,7 @@ where
                 let mut local_index = Vec::new();
                 let mut uncompressed_written: u64 = 0;
 
-                let mut in_buf = vec![0u8; 2 << 20]; // 2 MiB buffer
+                let mut in_buf = vec![0u8; 4 * 1024 * 1024]; // Keep 4 MiB for compatibility - will optimize later
                 for path in &chunk {
                     let mut f = File::open(path).expect("open");
                     let meta = f.metadata().expect("meta");
@@ -438,11 +449,13 @@ let enc = comp_buf;
             let offset = out_file.seek(SeekFrom::End(0)).expect("seek");
             out_file.write_all(&comp_data).expect("write shard");
 
+            let shard_crc = crc32fast::hash(&comp_data);
             shard_infos[sid] = Some(ShardInfo {
                 offset: offset as u64,
                 compressed_size: comp_data.len() as u64,
                 uncompressed_size: unc_size,
                 file_count: local_files.len(),
+                crc32: shard_crc,
                 nonce: nonce_opt,
             });
             files_by_shard[sid] = Some(local_files);
@@ -796,6 +809,27 @@ where
     }
     let progress_tracker = std::sync::Arc::new(std::sync::Mutex::new(progress_tracker));
     
+    // --- Verify shard CRC32 before extraction ---
+    // use crc32fast::Hasher as Crc32Hasher; // already imported earlier in function
+    for shard in &shards {
+        let mut file_crc = File::open(archive_path)?;
+        file_crc.seek(SeekFrom::Start(shard.offset))?;
+        let mut hasher = Crc32Hasher::new();
+        let mut remaining = shard.compressed_size;
+        let mut buf = vec![0u8; 8 * 1024 * 1024];
+        while remaining > 0 {
+            let read_sz = std::cmp::min(remaining, buf.len() as u64) as usize;
+            let n = file_crc.read(&mut buf[..read_sz])?;
+            if n == 0 { break; }
+            hasher.update(&buf[..n]);
+            remaining -= n as u64;
+        }
+        let calc = hasher.finalize();
+        if calc != shard.crc32 {
+            return Err(format!("CRC mismatch in shard at offset {} (expected {:08x}, got {:08x})", shard.offset, shard.crc32, calc).into());
+        }
+    }
+
     println!(
         "[katana] Extracting {} shards (filter: {} files)…",
         shards.len(),

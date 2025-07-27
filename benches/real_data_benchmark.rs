@@ -175,9 +175,8 @@ fn run_blitzarch_bench(
 
     match variant_string.as_str() {
         "katana_fast16" => {
-            threads_flag = "--threads 0".to_string();
-            extra_flags.push_str(" --katana --codec-threads 0");
-            bundle_size_mib = 16;
+            threads_flag = "--threads 32".to_string();
+            extra_flags.push_str(" --codec-threads 16");
         }
         "katana_auto_enc" => {
             threads_flag = "--threads 0".to_string();
@@ -211,7 +210,7 @@ fn run_blitzarch_bench(
         }
         "katana_dedup4" => {
             threads_flag = "--threads 0".to_string();
-            extra_flags.push_str(" --katana --codec-threads 0");
+            extra_flags.push_str(" --codec-threads 0");
             bundle_size_mib = 4;
         }
         "text64" => {
@@ -256,7 +255,7 @@ fn run_blitzarch_bench(
         }
         "katana" => {
             threads_flag = "--threads 0".to_string();
-            extra_flags.push_str(" --katana --codec-threads 0");
+            extra_flags.push_str(" --codec-threads 0");
         }
         "katana_adaptive" => {
             threads_flag = "--threads 0".to_string();
@@ -268,20 +267,12 @@ fn run_blitzarch_bench(
         }
         "katana_mem_50pct" => {
             threads_flag = "--threads 0".to_string();
-            extra_flags.push_str(" --codec-threads 0 --text-bundle auto");
-            // Вычисляем половину объёма оперативной памяти системы (MiB)
-            let half_mib = {
-                use std::process::Command;
-                let out = Command::new("sysctl").arg("-n").arg("hw.memsize").output().ok();
-                let bytes = out
-                    .and_then(|o| if o.status.success() { Some(o) } else { None })
-                    .and_then(|o| String::from_utf8(o.stdout).ok())
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .unwrap_or(8 * 1024 * 1024 * 1024); // fallback 8 ГиБ
-                bytes / 2 / 1024 / 1024
-            };
-            extra_flags.push_str(&format!(" --memory-budget {}", half_mib));
+            extra_flags.push_str(" --codec-threads 0 --text-bundle auto --memory-budget 50%");
         }
+        "katana_mem_3pct" => {
+            threads_flag = "--threads 0".to_string();
+            extra_flags.push_str(" --codec-threads 0 --text-bundle auto --memory-budget 3%");
+        },
         "katana_mem_500" => {
             threads_flag = "--threads 0".to_string();
             extra_flags.push_str(" --codec-threads 0 --text-bundle auto --memory-budget 500");
@@ -305,12 +296,14 @@ fn run_blitzarch_bench(
 
     // --- Create Archive ---
     let password_flag = password_opt.map_or("".to_string(), |p| format!(" --password '{}'", p));
+    // Use '=' to pass negative levels safely (e.g. --level=-3)
+    let level_flag = format!("--level={}", level);
     let create_command_str = format!(
-        "'{}' create --output '{}' --bundle-size {} --level {} {} --workers auto{}{} '{}'",
+        "'{}' create --output '{}' --bundle-size {} {} {} --workers auto --progress{}{} '{}'",
         blitzarch_exe.display(),
         archive_path.display(),
         bundle_size_mib,
-        level,
+        level_flag,
         threads_flag,
         extra_flags,
         password_flag,
@@ -332,7 +325,7 @@ fn run_blitzarch_bench(
     let extract_password_flag = password_opt.map_or("".to_string(), |p| format!(" --password '{}'", p));
     let extract_command_str = if seekable {
         format!(
-            "'{}' extract --seekable --output '{}'{} '{}'",
+            "'{}' extract --seekable --output '{}' --progress{} '{}'",
             blitzarch_exe.display(),
             extract_path.display(),
             extract_password_flag,
@@ -340,7 +333,7 @@ fn run_blitzarch_bench(
         )
     } else {
         format!(
-            "'{}' extract --output '{}'{} '{}'",
+            "'{}' extract --output '{}' --progress{} '{}'",
             blitzarch_exe.display(),
             extract_path.display(),
             extract_password_flag,
@@ -732,29 +725,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Рекомендуемые профили и конкуренты для маркетингового бенчмарка
     let profiles = vec![
-        // BlitzArch (Katana)
-        ("BlitzArch", "L3_katana_auto"),
-        ("BlitzArch", "L3_katana_auto_enc"),
-        // --- Новые профили для теста памяти ---
-        ("BlitzArch", "L3_katana_mem_unl"),      // без ограничения памяти
-        ("BlitzArch", "L3_katana_mem_50pct"),    // 50 % системной памяти
-        ("BlitzArch", "L3_katana_mem_500"),      // фиксировано 500 MiB
-        // --------------------------------------
-        ("BlitzArch", "L7_katana_auto"),
-        //("BlitzArch", "L12_katana_auto"), // временно отключаем для ускорения бенчей
-        // tar + zstd
-        ("tar+zstd", "L3"),
-        ("tar+zstd", "L7"),
-        //("tar+zstd", "L12"),
-        // 7z (LZMA2)
-        ("7z_lzma2", "L7_MT"),
-        //("7z_lzma2", "L12_MT"),
-        // zip (zstd) via 7z
-        ("zip+zstd", "L7_MT"),
-        //("zip+zstd", "L12_MT"),
+        ("BlitzArch", "L3_katana_mem_500"),   // фиксированный лимит 500 MiB
+        ("BlitzArch", "L3_katana_mem_3pct"), // лимит 3% от системной памяти (~500 MiB при 16 ГБ)
     ];
 
-        /* Legacy baseline profiles – commented out
+    /* Legacy baseline profiles – commented out
         ("BlitzArch", "L1_base"),
         ("BlitzArch", "L1_threads"),
         ("BlitzArch", "L1_sharded"),
@@ -802,10 +777,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (dataset_name, dataset_path_str) in &datasets {
         let dataset_path = Path::new(dataset_path_str);
         for (archiver, profile) in &profiles {
-            // Отключаем сторонние архиваторы, оставляем только BlitzArch
-            if *archiver != "BlitzArch" {
-                continue;
-            }
+            // Запускаем все архиваторы, указанные в списке `profiles`
             // Skip heavy video dataset for 7z and zip because these formats may skip large files like sample.mp4
             if (archiver.starts_with("7z") || archiver.starts_with("zip")) && dataset_name.contains("video") {
                 println!("Skipping {} on dataset {} (unsupported large video files)", archiver, dataset_name);

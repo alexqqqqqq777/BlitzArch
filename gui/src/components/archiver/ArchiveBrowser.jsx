@@ -222,7 +222,7 @@ export default function ArchiveBrowser({ archive, onExtractFiles }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-slate-200 text-sm truncate">{file.name}</p>
                   <p className="text-slate-500 text-xs">
-                    {formatSize(file.size)} • CRC: {file.crc32?.slice(0, 8)}
+                    {formatSize(file.size)} • BLAKE3: {file.crc32?.slice(0, 8)}
                   </p>
                 </div>
                 

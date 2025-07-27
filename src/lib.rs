@@ -12,6 +12,7 @@
 //! - [`crypto`]: Manages AES-256-GCM encryption and decryption.
 //! - [`extract`]: Provides functions for extracting files from an archive.
 //! - [`katana`]: Implements the high-performance, parallel-friendly "Katana" archive format.
+//! - [`autotune`]: Provides adaptive resource management and bottleneck detection for optimal performance.
 //! - [`workers`]: Contains the parallel processing logic for multi-threaded operations.
 //! 
 //! ## Examples
@@ -26,6 +27,7 @@
 // This file declares all the modules in the library.
 
 pub mod archive;
+pub mod autotune;
 pub mod cli;
 pub mod common;
 pub mod compress;

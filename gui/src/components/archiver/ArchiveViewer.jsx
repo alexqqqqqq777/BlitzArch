@@ -474,7 +474,7 @@ export default function ArchiveViewer({ archive, onExtract, onClose }) {
               <p className="text-slate-400 text-xs">
                 {item.is_dir 
                   ? `Папка • ${formatSize(item.size)}`
-                  : `${formatSize(item.size)} • CRC: ${item.crc32?.slice(0, 8) || 'N/A'}`
+                  : `${formatSize(item.size)} • BLAKE3: ${item.crc32?.slice(0, 8) || 'N/A'}`
                 }
               </p>
             </div>

@@ -186,14 +186,21 @@ const findCommonRootPath = (paths) => {
 };
 
 const createArchiveWithGoldenStandard = async (files, settings) => {
+  console.log('🔧 DEBUG: createArchiveWithGoldenStandard called with settings:', settings);
+  
   const {
     compressionLevel = 3,
     password = null,
-    bundleSize = 32,
     threads = 0,
     codecThreads = 0, // not used in backend yet, but keep for compatibility
-    memoryBudget = 0
+    memoryBudget = 0,
+    skip_check = false // Default: paranoid integrity check enabled (secure by default)
   } = settings;
+  
+  console.log('🔧 DEBUG: Extracted parameters:', {
+    compressionLevel, password, threads, codecThreads, memoryBudget, skip_check
+  });
+  
   try {
     const archiveName = generateArchiveNameFromFiles(files);
     
@@ -228,10 +235,10 @@ const createArchiveWithGoldenStandard = async (files, settings) => {
       {
         compressionLevel,
         password,
-        bundleSize,
         memoryBudget,
         codecThreads,
-        threads
+        threads,
+        skip_check // Integrity check flag
       }
     );
     
@@ -289,7 +296,7 @@ export default function BlitzArch() {
   const [settings, setSettings] = useState({
     preset: 'balanced',
     compressionLevel: 3,        // README default level (balanced profile)
-    bundleSize: 0,             // Auto bundle size (balanced profile default)
+
     password: '',
     useEncryption: false,
     threads: 0,                // Auto threads
@@ -438,6 +445,8 @@ export default function BlitzArch() {
     addLog(`🚀 Starting archive creation from ${files.length} files...`);
     addLog(`📋 Files: ${files.map(f => f.name || f).join(', ')}`);
     
+    console.log('🎯 DEBUG: About to call createArchiveWithGoldenStandard with settings:', settings);
+    
     try {
       const result = await createArchiveWithGoldenStandard(files, settings);
       const formatSpeed = (val) => {
@@ -528,7 +537,7 @@ export default function BlitzArch() {
       setIsProcessing(false);
       setProgress(100);
     }
-  }, [settings, addLog]);
+  }, [settings]);
 
   const handleLoadArchive = async (archivePath) => {
     if (!archivePath) {

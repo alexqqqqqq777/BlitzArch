@@ -67,8 +67,8 @@ pub enum Commands {
         #[arg(long, hide = true)]
         sharded: bool,
 
-        /// `[ADVANCED]` Target bundle size in MiB for sharded mode.
-        #[arg(long, hide = true)]
+        /// `[ADVANCED]` Target bundle size in MiB for sharded mode. [default: 32]
+        #[arg(long, hide = true, default_value_t = 32)]
         bundle_size: u64,
 
         /// `[ADVANCED]` Strategy for bundling text files to improve compression.
@@ -86,6 +86,10 @@ pub enum Commands {
         /// Show real-time progress during archive creation.
         #[arg(long)]
         progress: bool,
+
+        /// Skip final integrity verification (UNSAFE; for benchmarks only).
+        #[arg(long = "skip-check", default_value_t = false)]
+        skip_check: bool,
     },
 
     /// Extract files from an archive.
@@ -172,8 +176,8 @@ pub fn parse_memory_budget_mb(budget_opt: &Option<String>) -> Result<Option<u64>
         }
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
-        let total_kib = sys.total_memory(); // KiB
-        let total_mib = total_kib / 1024;
+        let total_bytes = sys.total_memory(); // bytes
+        let total_mib = total_bytes / (1024 * 1024);
         let budget_mib = total_mib * pct / 100;
         return Ok(Some(budget_mib));
     }
