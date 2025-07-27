@@ -51,7 +51,7 @@ jobs:
         
       - name: Install GUI dependencies
         working-directory: gui
-        run: npm ci
+        run: npm install
 
       - name: Build (release) CLI
         run: cargo build --release --verbose
