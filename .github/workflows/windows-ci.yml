@@ -37,13 +37,45 @@ jobs:
       # See: https://github.com/microsoft/vcpkg/issues/4
       - name: Skip tests on Windows
         run: echo "Skipping tests on Windows due to side-by-side configuration issues"
-      - name: Build (release)
+      - name: Install Node.js for GUI build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install GUI dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Build (release) CLI
         run: cargo build --release --verbose
+
+      - name: Build GUI (Tauri)
+        working-directory: gui
+        run: npm run tauri build
 
       - name: Install WiX Toolset
         run: choco install wixtoolset -y
 
-      - name: Package MSI
+      - name: Prepare unified package
+        run: |
+          # Create package directory with CLI and GUI
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item "target/release/blitzarch.exe" -Destination "package/"
+          
+          # Copy GUI if exists
+          $GuiPath = "gui/src-tauri/target/release/bundle/msi/BlitzArch_*_x64_en-US.msi"
+          $GuiFiles = Get-ChildItem -Path $GuiPath -ErrorAction SilentlyContinue
+          if ($GuiFiles) {
+            Copy-Item $GuiFiles[0].FullName -Destination "package/BlitzArch-GUI.msi"
+            Write-Host "✅ GUI installer found and included"
+          } else {
+            Write-Host "⚠️  GUI installer not found, CLI-only package"
+          }
+        shell: pwsh
+
+      - name: Package unified MSI
         run: |
           $env:PATH = "C:\Program Files (x86)\WiX Toolset v3.11\bin;$env:PATH"
           # Check if build_msi.bat exists, if so use it, otherwise use direct candle/light commands
@@ -59,3 +91,9 @@ jobs:
         with:
           name: BlitzArch-MSI
           path: BlitzArch.msi
+
+      - name: Upload unified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlitzArch-Windows-Package
+          path: package/

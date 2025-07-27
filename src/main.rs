@@ -1,17 +1,105 @@
-//! Main entry point for the blitzarch CLI app
+//! Main entry point for BlitzArch unified app (GUI + CLI)
+//! 
+//! Usage:
+//!   blitzarch                    → launches GUI
+//!   blitzarch create file.blz    → launches CLI
+//!   blitzarch extract file.blz   → launches CLI
+//!   blitzarch list file.blz      → launches CLI
 
 use blitzarch::cli::{self, Commands};
 use blitzarch::{workers, extract};
 use blitzarch::progress::ProgressState;
+use std::env;
 use std::fs::File;
 use std::sync::{Arc, Mutex};
 use std::io::{self, Write};
+use std::process::{Command, Stdio};
 use term_size;
 use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn main() -> std::process::ExitCode {
-    if let Err(e) = run_app() {
+    // Parse command line arguments to determine launch mode
+    let args: Vec<String> = env::args().collect();
+    
+    // If no arguments (just program name) → launch GUI
+    if args.len() == 1 {
+        return launch_gui_mode();
+    }
+    
+    // If arguments present → launch CLI mode
+    launch_cli_mode()
+}
+
+/// Launch GUI mode by spawning separate GUI process
+fn launch_gui_mode() -> std::process::ExitCode {
+    // Try to find GUI executable next to current binary
+    let current_exe = match env::current_exe() {
+        Ok(path) => path,
+        Err(_) => {
+            eprintln!("❌ Error: Cannot determine current executable path");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    
+    let exe_dir = current_exe.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let gui_exe = if cfg!(windows) {
+        exe_dir.join("blitzarch-gui.exe")
+    } else if cfg!(target_os = "macos") {
+        exe_dir.join("BlitzArch.app/Contents/MacOS/BlitzArch")
+    } else {
+        exe_dir.join("blitzarch-gui")
+    };
+    
+    // Check if GUI executable exists
+    if !gui_exe.exists() {
+        eprintln!("🚀 BlitzArch GUI");
+        eprintln!("❌ GUI executable not found: {}", gui_exe.display());
+        eprintln!("");
+        eprintln!("💡 You can use CLI mode instead:");
+        eprintln!("   blitzarch create --output archive.blz folder/");
+        eprintln!("   blitzarch extract archive.blz --output extracted/");
+        eprintln!("   blitzarch list archive.blz");
+        eprintln!("");
+        eprintln!("📦 Or download GUI from: https://github.com/alexqqqqqq777/BlitzArch/releases");
+        return std::process::ExitCode::FAILURE;
+    }
+    
+    // Launch GUI process
+    println!("🚀 Starting BlitzArch GUI...");
+    match Command::new(&gui_exe)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+    {
+        Ok(mut child) => {
+            // Wait for GUI process to complete
+            match child.wait() {
+                Ok(status) => {
+                    if status.success() {
+                        std::process::ExitCode::SUCCESS
+                    } else {
+                        std::process::ExitCode::FAILURE
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ Error waiting for GUI process: {}", e);
+                    std::process::ExitCode::FAILURE
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("❌ Error launching GUI: {}", e);
+            eprintln!("💡 Use CLI mode: blitzarch create|extract|list [options]");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+/// Launch CLI mode (command-line interface)
+fn launch_cli_mode() -> std::process::ExitCode {
+    if let Err(e) = run_cli_app() {
         if e.downcast_ref::<clap::Error>().is_none() {
             eprintln!("Error: {}", e);
         }
@@ -20,7 +108,7 @@ fn main() -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
-fn run_app() -> Result<(), Box<dyn std::error::Error>> {
+fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
     let command = cli::run()?;
 
     match &command {

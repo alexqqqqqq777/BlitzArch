@@ -26,7 +26,18 @@ jobs:
         with:
           cache-key: "${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}"
 
-      - name: Build release binary
+      - name: Install Node.js for GUI build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install GUI dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Build release binary (CLI)
         env:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
         run: |
@@ -37,19 +48,44 @@ jobs:
             cargo build --release --locked
           fi
 
-      - name: Package artifact (Linux/macOS)
+      - name: Build GUI (Tauri)
+        working-directory: gui
+        env:
+          RING_ALLOW_MISSING_ARM_FEATURES: 1
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            npm run tauri build -- --target x86_64-apple-darwin
+          else
+            npm run tauri build
+          fi
+
+      - name: Package unified artifact (CLI + GUI)
         run: |
           set -e
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          
+          # Create packaging directory
+          mkdir -p package/
+          
           if [[ "${{ runner.os }}" == "Linux" ]]; then
-            BIN_PATH="target/release/blitzarch"
+            # Linux: CLI binary + GUI AppImage
+            cp target/release/blitzarch package/
+            if [ -f "gui/src-tauri/target/release/bundle/appimage/blitzarch_${VERSION}_amd64.AppImage" ]; then
+              cp "gui/src-tauri/target/release/bundle/appimage/blitzarch_${VERSION}_amd64.AppImage" package/blitzarch-gui
+            fi
             ART_OUT="blitzarch-${VERSION}-linux-x86_64.tar.gz"
-            tar -czf "$ART_OUT" -C target/release blitzarch
-          else
-            BIN_PATH="target/x86_64-apple-darwin/release/blitzarch"
+            tar -czf "$ART_OUT" -C package .
+            
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            # macOS: CLI binary + GUI .app bundle
+            cp target/x86_64-apple-darwin/release/blitzarch package/
+            if [ -d "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" ]; then
+              cp -r "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" package/
+            fi
             ART_OUT="blitzarch-${VERSION}-macos-x86_64.zip"
-            zip -j "$ART_OUT" "$BIN_PATH"
+            cd package && zip -r "../$ART_OUT" . && cd ..
           fi
+          
           echo "ARTIFACT=$ART_OUT" >> $GITHUB_ENV
 
       - name: Upload artifact
