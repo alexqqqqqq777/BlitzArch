@@ -75,8 +75,7 @@ jobs:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
         run: |
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            rustup target add x86_64-apple-darwin
-            npm run tauri build -- --target x86_64-apple-darwin
+            npm run tauri build
           else
             npm run tauri build
           fi
@@ -107,8 +106,9 @@ jobs:
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             # macOS: CLI binary + GUI .app bundle
             cp target/x86_64-apple-darwin/release/blitzarch package/
-            if [ -d "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" ]; then
-              cp -r "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" package/
+            BUNDLE_PATH=$(find gui/src-tauri/target -type d -path "*/bundle/macos/BlitzArch.app" | head -n 1)
+            if [ -n "$BUNDLE_PATH" ]; then
+              cp -r "gui/src-tauri/target/release/bundle/macos/BlitzArch.app" package/ || cp -r "$(find gui/src-tauri/target -type d -path "*/bundle/macos/BlitzArch.app" | head -n 1)" package/
               echo "✅ macOS GUI .app bundle found and included"
             else
               echo "❌ macOS GUI .app bundle NOT found! GUI build failed!"
