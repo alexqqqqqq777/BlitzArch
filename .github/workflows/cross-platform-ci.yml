@@ -75,6 +75,7 @@ jobs:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
         run: |
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            rustup target add x86_64-apple-darwin
             npm run tauri build -- --target x86_64-apple-darwin
           else
             npm run tauri build
