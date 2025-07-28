@@ -56,6 +56,10 @@ jobs:
       - name: Build (release) CLI
         run: cargo build --release --verbose
 
+      - name: Clean cargo cache (Windows CVT1100 workaround)
+        working-directory: gui/src-tauri
+        run: cargo clean
+        
       - name: Build GUI (Tauri)
         working-directory: gui
         run: npm run tauri build
