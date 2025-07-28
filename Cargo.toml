@@ -50,38 +50,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Cryptography and Hashing
-ring = { git = "https://github.com/briansmith/ring", branch = "main" }
+ring = "0.17.14"
 aes-gcm = "0.10"
-aes-gcm-stream = "0.2"
-scopeguard = "1.2"
-blake3 = "1.5"
-rand = "0.8"
-pbkdf2 = "0.12.2"
-sha2 = "0.10"
-thiserror = "1.0"
-
-# Content-Defined Chunking
-fastcdc = "2.0"
-
-# Indexing
-bloomfilter = "1.0"
-
-# Daemon (gRPC)
-tonic = "0.10"
-prost = "0.12"
-
-# Logging and Telemetry
-tracing = "0.1"
-
-# Parallel directory walking
-jwalk = "0.6"
-cap-std = "2.0"
-
-# Timestamps
-chrono = { version = "0.4", features = ["serde"] }
 
 
-dhat = { version = "0.3", optional = true }
+
 
 
 
@@ -130,5 +103,8 @@ harness = false
 name = "marketing_random_access"
 path = "benches/marketing_random_access.rs"
 harness = false
+
+[patch.crates-io]
+ring = { path = "vendor/ring" }
 
 
