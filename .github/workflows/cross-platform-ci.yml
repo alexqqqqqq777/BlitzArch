@@ -93,6 +93,12 @@ jobs:
             cp target/release/blitzarch package/
             if [ -f "gui/src-tauri/target/release/bundle/appimage/blitzarch_${VERSION}_amd64.AppImage" ]; then
               cp "gui/src-tauri/target/release/bundle/appimage/blitzarch_${VERSION}_amd64.AppImage" package/blitzarch-gui
+              echo "✅ Linux GUI AppImage found and included"
+            else
+              echo "❌ Linux GUI AppImage NOT found! GUI build failed!"
+              echo "Expected: gui/src-tauri/target/release/bundle/appimage/blitzarch_${VERSION}_amd64.AppImage"
+              ls -la gui/src-tauri/target/release/bundle/appimage/ || echo "AppImage directory does not exist"
+              exit 1
             fi
             ART_OUT="blitzarch-${VERSION}-linux-x86_64.tar.gz"
             tar -czf "$ART_OUT" -C package .
@@ -102,6 +108,12 @@ jobs:
             cp target/x86_64-apple-darwin/release/blitzarch package/
             if [ -d "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" ]; then
               cp -r "gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app" package/
+              echo "✅ macOS GUI .app bundle found and included"
+            else
+              echo "❌ macOS GUI .app bundle NOT found! GUI build failed!"
+              echo "Expected: gui/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/BlitzArch.app"
+              ls -la gui/src-tauri/target/x86_64-apple-darwin/release/bundle/ || echo "Bundle directory does not exist"
+              exit 1
             fi
             ART_OUT="blitzarch-${VERSION}-macos-x86_64.zip"
             cd package && zip -r "../$ART_OUT" . && cd ..
