@@ -24,16 +24,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: 'npm'
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 8
-          run_install: true
+      - name: Install pnpm
+        run: npm install -g pnpm@8
 
       - name: Install dependencies
-        run: |
-          corepack enable
+        run: pnpm install --frozen-lockfile
           pnpm install --frozen-lockfile
 
       - name: Build Tauri app
