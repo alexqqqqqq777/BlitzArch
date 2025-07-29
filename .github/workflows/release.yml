@@ -69,7 +69,6 @@ jobs:
 
       # Upload artifacts for every successful build (branch or tag)
       - name: Upload build artifacts
-        working-directory: ${{ github.workspace }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-bundles
