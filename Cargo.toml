@@ -113,13 +113,8 @@ name = "marketing_random_access"
 path = "benches/marketing_random_access.rs"
 harness = false
 
-[patch.crates-io]
-ring = { path = "vendor/ring" }
-
 [workspace]
 members = [
     "gui/src-tauri",
     "gui/src-tauri/dragout-plugin",
 ]
-
-
