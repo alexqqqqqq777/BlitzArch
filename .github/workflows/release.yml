@@ -62,7 +62,9 @@ jobs:
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
       - name: List bundle contents
-        run: ls -R target || true
+        run: |
+          ls -R target || true
+          ls -R gui/target || true
 
       # Upload artifacts for every successful build (branch or tag)
       - name: Upload build artifacts
@@ -71,6 +73,7 @@ jobs:
           name: ${{ matrix.os }}-bundles
           path: |
             target/**/bundle/**
+            gui/target/**/bundle/**
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
