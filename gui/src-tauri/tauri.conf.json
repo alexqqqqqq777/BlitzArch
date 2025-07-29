@@ -32,7 +32,8 @@
 
       "icons/icon.icns",
       "icons/icon.ico",
-      "icons/icon.png"
+      "icons/icon.png",
+      "icons/128x128.png"
     ]
   }
 }
