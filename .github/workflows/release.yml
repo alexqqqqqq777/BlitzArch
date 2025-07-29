@@ -67,6 +67,13 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
+      - name: "Diagnostic: find bundle paths"
+        run: |
+          echo "=== find bundle directories ==="
+          find $GITHUB_WORKSPACE -type d -name bundle -print || true
+          echo "=== list top-level bundle contents ==="
+          find $GITHUB_WORKSPACE -type f -path "*/bundle/*" | head -n 50 || true
+
       - name: List bundle contents
         run: |
           ls -R target || true
@@ -81,6 +88,7 @@ jobs:
           path: |
             ${{ github.workspace }}/target/**/bundle/**
             ${{ github.workspace }}/gui/**/bundle/**
+          if-no-files-found: error
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
