@@ -30,7 +30,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev squashfs-tools patchelf curl file
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev squashfs-tools patchelf curl file dpkg-dev rpm
 
       - name: Install AppImage tool (Linux)
         if: runner.os == 'Linux'
@@ -46,6 +46,12 @@ jobs:
       - name: Install WiX toolset (Windows)
         if: runner.os == 'Windows'
         run: choco install wixtoolset --no-progress
+
+      - name: Add WiX to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install pnpm and dependencies
         run: |
@@ -73,8 +79,8 @@ jobs:
         with:
           name: ${{ matrix.os }}-bundles
           path: |
-            target/release/bundle/**
-            gui/**/bundle/**
+            ${{ github.workspace }}/target/**/bundle/**
+            ${{ github.workspace }}/gui/**/bundle/**
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
