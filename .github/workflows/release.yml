@@ -46,13 +46,16 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
+      - name: List bundle contents
+        run: ls -R gui/src-tauri/target || true
+
       # Upload artifacts for every successful build (branch or tag)
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-bundles
           path: |
-            gui/src-tauri/target/release/bundle/**
+            gui/src-tauri/target/**/bundle/**
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
