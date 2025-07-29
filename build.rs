@@ -1,8 +1,10 @@
 fn main() {
     // --- Windows resource embedding (manifest, icon) ---
+    // --- Windows resource embedding (manifest, icon) ---
+    // Выполняем только если это *основной* бинарник, иначе при линковке
+    // конечного `app.exe` (Tauri) получаются дубликаты VERSION ресурсов.
     #[cfg(target_os = "windows")]
-    {
-        // Use `winres` crate to embed resources at link time
+    if std::env::var("CARGO_BIN_NAME").is_ok() {
         let mut res = winres::WindowsResource::new();
         res.set_manifest_file("windows_app.manifest");
         // Optional: uncomment when icon available
