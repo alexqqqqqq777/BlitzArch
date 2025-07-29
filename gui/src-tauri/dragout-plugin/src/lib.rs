@@ -34,6 +34,9 @@ fn native_drag_out(archive_path: String, file_paths: Vec<String>, _target_dir: O
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+#[cfg(all(target_os = "macos", feature = "objc2_backend"))]
+pub mod macos_objc2;
+
 #[cfg(target_os = "windows")]
 mod windows_impl {
     pub fn init() {

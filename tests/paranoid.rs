@@ -25,6 +25,8 @@ fn paranoid_ok() {
         /*codec_threads*/ 1,
         /*mem_budget*/ None,
         /*password*/ None,
+        /*compression_level*/ None,
+        None::<fn(blitzarch::progress::ProgressState)>,
     )
     .expect("create archive");
 
@@ -38,7 +40,7 @@ fn paranoid_corrupt() {
     let input = create_sample_file(dir.path(), "bar.txt", b"hello corrupted");
     let out_path = dir.path().join("archive_corrupt.katana");
 
-    create_katana_archive(&[input], &out_path, 1, 1, None, None, None, None::<fn(crate::progress::ProgressState)>).expect("create archive");
+    create_katana_archive(&[input], &out_path, 1, 1, None, None, None, None::<fn(blitzarch::progress::ProgressState)>).expect("create archive");
 
     // corrupt the archive by appending junk
     {

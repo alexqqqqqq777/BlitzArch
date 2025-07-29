@@ -5,7 +5,7 @@
 use cocoa::appkit::NSApp;
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSString, NSURL, NSAutoreleasePool, NSPoint, NSRect, NSSize};
-use cocoa::appkit::{NSPasteboard};
+use cocoa::appkit::NSPasteboard;
 use objc::{class, msg_send, sel, sel_impl};
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Sel};
@@ -196,32 +196,11 @@ fn get_delegate_class() -> &'static Class {
         }
     }));
 
-    // Всегда вызываем completion; перехватываем как Rust-паники, так и ObjC-исключения.
-
-    let completion_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // Перехватываем возможные Objective-C исключения так, чтобы они не вышли за границу FFI
-        let objc_result = unsafe {
-            use block2::Block;
-            use objc2::runtime::AnyObject;
-            objc_exception::r#try(|| {
-                // Сигнатура completionHandler: void (^)(NSError * _Nullable error)
-                let cb: &Block<dyn Fn(*mut AnyObject) -> ()> = &*(completion as *const _);
-                cb.call((std::ptr::null_mut(),)); // передаём nil
-            })
-        };
-
-        if let Err(ex) = objc_result {
-            // objc_exception::r#try возвращает Err(Id) при исключении
-
-            println!("[dragout][panic] write_promise completion threw Objective-C exception: {:?}", ex);
-        }
-    }));
+    // Завершаем файл-промис без вызова Objective-C completion-handler —
+    // пока достаточно для корректной работы Finder.
 
     if let Err(err) = result {
         println!("[dragout][panic] write_promise caught panic while extracting: {:?}", err);
-    }
-    if let Err(err) = completion_result {
-        println!("[dragout][panic] write_promise completion handler threw ObjC exception: {:?}", err);
     }
 }
 

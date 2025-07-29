@@ -17,6 +17,7 @@ import tauriBlitzArchEngine from '../lib/tauri-engine.js';
 import { invoke } from '@tauri-apps/api/core';
 
 import { determineOutputPath, generateArchiveName, createArchivePath, validateOutputDirectory } from '../lib/path-utils.js';
+import AppIcon from '/Blitz.png';
 
 // New stylish icon with lightning bolt
 const BlitzIcon = (props) => (
@@ -989,7 +990,7 @@ export default function BlitzArch() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="p-2 bg-gradient-to-br from-neutral-800 to-neutral-900 rounded-xl border border-neutral-700 shadow-lg">
-                  <BlitzIcon className="w-10 h-10" />
+                  <img src={AppIcon} alt="App icon" className="w-10 h-10" />
                 </div>
                 <div>
                   <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">

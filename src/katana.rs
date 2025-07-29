@@ -32,6 +32,32 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write, BufWriter};
 use scopeguard;
+
+// ---------- Footer constants (added for compatibility with new BLAKE3 footer) --------
+/// 16-byte magic that marks optional integrity footer written by `katana_stream`.
+const FOOTER_MAGIC: &[u8; 16] = b"KATANA_HASH_FOOT";
+const FOOTER_SIZE: u64 = 16 + 8 + 32; // magic + data_len (u64) + blake3 (32)
+
+/// If the file ends with the optional BLAKE3 footer, returns `file_len - FOOTER_SIZE`,
+/// otherwise returns original `file_len`.
+fn data_len_without_footer(f: &mut File, file_len: u64) -> std::io::Result<u64> {
+    use std::io::{Read, Seek};
+    if file_len >= FOOTER_SIZE {
+        // Peek last 16 bytes and compare magic
+        f.seek(SeekFrom::End(-(FOOTER_SIZE as i64)))?;
+        let mut magic_buf = [0u8; 16];
+        f.read_exact(&mut magic_buf)?;
+        if &magic_buf == FOOTER_MAGIC {
+            // Next 8 bytes – original data length
+            let mut len_bytes = [0u8; 8];
+            f.read_exact(&mut len_bytes)?;
+            let data_len = u64::from_le_bytes(len_bytes);
+            return Ok(data_len);
+        }
+    }
+    Ok(file_len)
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
 use std::path::{Path, PathBuf};
@@ -552,55 +578,15 @@ if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
 /// This provides a quick and efficient way to identify Katana archives without parsing the full structure.
 pub fn is_katana_archive(path: &Path) -> std::io::Result<bool> {
     let mut f = File::open(path)?;
-    let len = f.metadata()?.len();
-    if len < 8 {
+    let file_len = f.metadata()?.len();
+    let data_len = data_len_without_footer(&mut f, file_len)?;
+    if data_len < 8 {
         return Ok(false);
     }
-    f.seek(SeekFrom::End(-8))?;
+    f.seek(SeekFrom::Start(data_len - 8))?;
     let mut magic = [0u8; 8];
     f.read_exact(&mut magic)?;
     Ok(&magic == KATANA_MAGIC)
-}
-
-/// Extracts a Katana archive to a specified output directory.
-///
-/// This function will extract the entire contents of the archive.
-///
-/// # Arguments
-/// * `archive_path` - The path to the Katana archive file.
-/// * `output_dir` - The directory where the contents will be extracted.
-/// * `password` - Optional password for encrypted archives.
-/// * `strip_components` - Optional number of leading path components to strip.
-pub fn extract_katana_archive(
-    archive_path: &Path,
-    output_dir: &Path,
-    password: Option<String>,
-    strip_components: Option<u32>,
-) -> Result<(), Box<dyn Error>> {
-    extract_katana_archive_with_progress(archive_path, output_dir, &[], password, strip_components, None::<fn(ProgressState)>)
-}
-
-/// Extracts a Katana archive with optional progress tracking.
-///
-/// # Arguments
-/// * `archive_path` - The path to the Katana archive file.
-/// * `output_dir` - The directory where the contents will be extracted.
-/// * `selected_files` - Empty slice means extract all files.
-/// * `password` - Optional password for encrypted archives.
-/// * `strip_components` - Optional number of leading path components to strip.
-/// * `progress_callback` - Optional callback for progress updates.
-pub fn extract_katana_archive_with_progress<F>(
-    archive_path: &Path,
-    output_dir: &Path,
-    selected_files: &[PathBuf],
-    password: Option<String>,
-    strip_components: Option<u32>,
-    progress_callback: Option<F>,
-) -> Result<(), Box<dyn Error>>
-where
-    F: Fn(ProgressState) + Send + Sync + 'static,
-{
-    extract_katana_archive_with_progress_impl(archive_path, output_dir, selected_files, password, strip_components, progress_callback)
 }
 
 /// Lists all files in a Katana archive without extracting them.
@@ -615,12 +601,13 @@ pub fn list_katana_files(
     password: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
     let mut f = File::open(archive_path)?;
-    let len = f.metadata()?.len();
-    if len < 24 {
+    let file_len = f.metadata()?.len();
+    let data_len = data_len_without_footer(&mut f, file_len)?;
+    if data_len < 24 {
         return Err("File too small".into());
     }
     // Read footer
-    f.seek(SeekFrom::End(-24))?;
+    f.seek(SeekFrom::Start(data_len - 24))?;
     let mut buf_footer = [0u8; 24];
     f.read_exact(&mut buf_footer)?;
     let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
@@ -632,7 +619,7 @@ pub fn list_katana_files(
     let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
 
     // Read compressed index
-    let idx_comp_offset = len - 24 - idx_comp_size;
+    let idx_comp_offset = data_len - 24 - idx_comp_size;
     f.seek(SeekFrom::Start(idx_comp_offset))?;
     let mut idx_comp = vec![0u8; idx_comp_size as usize];
     f.read_exact(&mut idx_comp)?;
@@ -700,6 +687,32 @@ pub fn extract_katana_archive_internal(
     extract_katana_archive_with_progress(archive_path, output_dir, selected_files, password, strip_components, None::<fn(ProgressState)>)
 }
 
+/// Public wrapper for Katana extraction with optional real-time progress.
+///
+/// This thin wrapper forwards to `extract_katana_archive_with_progress_impl` so that
+/// callers (CLI, GUI, Tauri) can link against a stable API while implementation
+/// details remain private.
+pub fn extract_katana_archive_with_progress<F>(
+    archive_path: &Path,
+    output_dir: &Path,
+    selected_files: &[PathBuf],
+    password: Option<String>,
+    strip_components: Option<u32>,
+    progress_callback: Option<F>,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn(ProgressState) + Send + Sync + 'static,
+{
+    extract_katana_archive_with_progress_impl(
+        archive_path,
+        output_dir,
+        selected_files,
+        password,
+        strip_components,
+        progress_callback,
+    )
+}
+
 /// Internal implementation of Katana extraction with progress support.
 fn extract_katana_archive_with_progress_impl<F>(
     archive_path: &Path,
@@ -713,12 +726,13 @@ where
     F: Fn(ProgressState) + Send + Sync + 'static,
 {
     let mut f = File::open(archive_path)?;
-    let len = f.metadata()?.len();
-    if len < 24 {
+    let file_len = f.metadata()?.len();
+    let data_len = data_len_without_footer(&mut f, file_len)?;
+    if data_len < 24 {
         return Err("File too small".into());
     }
     // Read footer
-    f.seek(SeekFrom::End(-24))?;
+    f.seek(SeekFrom::Start(data_len - 24))?;
     let mut buf_footer = [0u8; 24];
     f.read_exact(&mut buf_footer)?;
     let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
@@ -730,7 +744,7 @@ where
     let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
 
     // Read compressed index
-    let idx_comp_offset = len - 24 - idx_comp_size;
+    let idx_comp_offset = data_len - 24 - idx_comp_size;
     f.seek(SeekFrom::Start(idx_comp_offset))?;
     let mut idx_comp = vec![0u8; idx_comp_size as usize];
     f.read_exact(&mut idx_comp)?;

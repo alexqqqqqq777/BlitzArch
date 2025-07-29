@@ -1165,13 +1165,34 @@ fn read_archive_index(archive_path: &str, _password: Option<String>) -> Result<V
 
 
     let mut f = std::fs::File::open(archive_path)?;
-    let len = f.metadata()?.len();
-    if len < 24 {
+    let file_len = f.metadata()?.len();
+    // Support optional BLAKE3 footer written by katana_stream (MAGIC + data_len + hash)
+    const FOOTER_MAGIC: &[u8; 16] = b"KATANA_HASH_FOOT";
+    const FOOTER_SIZE: u64 = 16 + 8 + 32; // magic + data_len + blake3
+    let data_len = {
+        if file_len >= FOOTER_SIZE {
+            // Peek possible footer
+            f.seek(SeekFrom::End(-(FOOTER_SIZE as i64)))?;
+            let mut magic_buf = [0u8; 16];
+            f.read_exact(&mut magic_buf)?;
+            if &magic_buf == FOOTER_MAGIC {
+                // Next 8 bytes -> original data length (without footer)
+                let mut len_bytes = [0u8; 8];
+                f.read_exact(&mut len_bytes)?;
+                u64::from_le_bytes(len_bytes)
+            } else {
+                file_len
+            }
+        } else {
+            file_len
+        }
+    };
+    if data_len < 24 {
         return Err("File too small or not a Katana archive".into());
     }
 
-    // Read footer (index sizes + magic)
-    f.seek(SeekFrom::End(-24))?;
+    // Read footer (index sizes + magic) located 24 bytes before end of data section (excluding optional BLAKE3 footer)
+    f.seek(SeekFrom::Start(data_len - 24))?;
     let mut buf_footer = [0u8; 24];
     f.read_exact(&mut buf_footer)?;
     let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
@@ -1184,7 +1205,7 @@ fn read_archive_index(archive_path: &str, _password: Option<String>) -> Result<V
     let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
 
     // Read compressed index
-    let idx_comp_offset = len - 24 - idx_comp_size;
+    let idx_comp_offset = data_len - 24 - idx_comp_size;
     f.seek(SeekFrom::Start(idx_comp_offset))?;
     let mut idx_comp = vec![0u8; idx_comp_size as usize];
     f.read_exact(&mut idx_comp)?;

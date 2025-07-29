@@ -52,6 +52,15 @@ serde_json = "1.0"
 # Cryptography and Hashing
 ring = "0.17.14"
 aes-gcm = "0.10"
+# Added missing crates after dependency regression
+aes-gcm-stream = "0.2"
+rand = "0.8"
+pbkdf2 = "0.12"
+sha2 = "0.10"
+blake3 = "1.5"
+chrono = { version = "0.4", features = ["serde"] }
+jwalk = "0.6"
+scopeguard = "1.2"
 
 
 
@@ -106,5 +115,11 @@ harness = false
 
 [patch.crates-io]
 ring = { path = "vendor/ring" }
+
+[workspace]
+members = [
+    "gui/src-tauri",
+    "gui/src-tauri/dragout-plugin",
+]
 
 

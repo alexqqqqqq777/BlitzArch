@@ -118,11 +118,12 @@ fn katana_wrong_magic_bytes() {
     let arch_dir = tempdir().unwrap();
     let arch_path = arch_dir.path().join("magic.blz");
     katana::create_katana_archive(&[src.path().to_path_buf()], &arch_path, 0, None).unwrap();
-    // Corrupt footer magic bytes (last 8 bytes)
+    // Corrupt index magic ("KATIDX01") located 8 bytes before optional footer
     let mut f = OpenOptions::new().read(true).write(true).open(&arch_path).unwrap();
     let metadata = f.metadata().unwrap();
     let file_size = metadata.len();
-    f.seek(SeekFrom::Start(file_size - 8)).unwrap();
+    const FOOTER_SIZE: u64 = 56; // 16-byte magic + 8-byte len + 32-byte hash
+    f.seek(SeekFrom::Start(file_size - FOOTER_SIZE - 8)).unwrap();
     f.write_all(&[0u8; 8]).unwrap();
     f.sync_all().unwrap();
     // Detection should fail – no further extraction attempt needed
