@@ -73,9 +73,7 @@ jobs:
         with:
           name: ${{ matrix.os }}-bundles
           path: |
-            target/**/bundle/**
-            gui/target/**/bundle/**
-            gui/src-tauri/target/**/bundle/**
+            **/bundle/**
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
