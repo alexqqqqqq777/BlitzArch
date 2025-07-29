@@ -36,7 +36,7 @@ jobs:
         run: |
           npm install -g pnpm@8
           cd gui
-          pnpm install --frozen-lockfile
+          pnpm install
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
