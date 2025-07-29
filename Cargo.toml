@@ -27,7 +27,7 @@ regex = "1.10.4"
 # Core compression
 zstd = { version = "0.13.1", features = ["zstdmt", "experimental"] }
 zstd-sys = { version = "2.0.15", features = ["legacy"] }
-xz2 = "0.1"
+xz2 = { version = "0.1", features = ["static"] }
 tempfile = "3.10.1"
 zip = { version = "0.6", features = ["zstd"] }
 crossbeam-channel = "0.5.12"
