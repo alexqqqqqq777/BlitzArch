@@ -65,6 +65,7 @@ jobs:
         run: |
           ls -R target || true
           ls -R gui/target || true
+          ls -R gui/src-tauri/target || true
 
       # Upload artifacts for every successful build (branch or tag)
       - name: Upload build artifacts
@@ -74,6 +75,7 @@ jobs:
           path: |
             target/**/bundle/**
             gui/target/**/bundle/**
+            gui/src-tauri/target/**/bundle/**
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v2
