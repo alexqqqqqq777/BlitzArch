@@ -26,10 +26,10 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
-      - name: Set up pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@8.15.3 --activate
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: true
 
       - name: Install dependencies
         run: |
