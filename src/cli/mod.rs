@@ -205,3 +205,80 @@ pub fn run() -> Result<Commands, Box<dyn std::error::Error>> {
     let args = Args::parse();
     Ok(args.command)
 }
+
+// -----------------------------------------------------------------------------
+// Path/filename sanitization helpers for CLI output archive path
+// These are only needed for Windows where certain characters and reserved names
+// make `std::fs::File::create` fail with code 123 (ERROR_INVALID_NAME).
+// For non-Windows platforms the original path is returned unchanged.
+// The logic intentionally mirrors `sanitize_windows_component` used internally
+// in `katana.rs` so that GUI and CLI behave identically.
+// -----------------------------------------------------------------------------
+
+#[cfg(windows)]
+fn is_windows_reserved(name_upper: &str) -> bool {
+    matches!(name_upper,
+        "CON" | "PRN" | "AUX" | "NUL" |
+        "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" |
+        "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9")
+}
+
+/// Sanitize a single path component (file or directory name) for Windows.
+#[cfg(windows)]
+fn sanitize_component(name: &str) -> String {
+    // 1. Replace invalid and control characters
+    let mut out: String = name
+        .chars()
+        .map(|ch| match ch {
+            '<' | '>' | ':' | '"' | '\\' | '/' | '|' | '?' | '*' => '_',
+            c if (c as u32) < 32 => '_',
+            c => c,
+        })
+        .collect();
+
+    // 2. Trim trailing spaces and dots
+    while out.ends_with(' ') || out.ends_with('.') {
+        out.pop();
+    }
+
+    if out.is_empty() {
+        out.push('_');
+    }
+
+    // 3. Append '_' if the stem equals a reserved DOS name
+    let upper_no_ext = out.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if is_windows_reserved(&upper_no_ext) {
+        out.push('_');
+    }
+
+    out
+}
+
+/// Public helper used by the CLI to ensure the output archive path is valid on Windows.
+#[cfg(windows)]
+pub fn sanitize_output_path(original: &std::path::PathBuf) -> std::path::PathBuf {
+    use std::path::{PathBuf, Component};
+    let mut sanitized = PathBuf::new();
+
+    for comp in original.components() {
+        use std::path::Component;
+        match comp {
+            Component::Prefix(prefix) => sanitized.push(std::path::Path::new(prefix.as_os_str())),
+            Component::RootDir => sanitized.push(std::path::Path::new(".")), // preserve root on Windows drive
+            Component::CurDir => sanitized.push("."),
+            Component::ParentDir => sanitized.push(".."),
+            Component::Normal(name) => {
+                let s = name.to_string_lossy();
+                sanitized.push(sanitize_component(&s));
+            }
+        }
+    }
+    sanitized
+}
+
+#[cfg(not(windows))]
+#[allow(unused_variables)]
+pub fn sanitize_output_path(original: &std::path::PathBuf) -> std::path::PathBuf {
+    // Non-Windows → no sanitization required
+    original.clone()
+}

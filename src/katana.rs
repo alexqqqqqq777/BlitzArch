@@ -109,20 +109,94 @@ const KATANA_MAGIC: &[u8; 8] = b"KATIDX01";
 /// Remove unnecessary path components like './' while preserving all directories.
 /// Example: "./dir1/dir2/file.txt" becomes "dir1/dir2/file.txt"
 pub(crate) fn normalize_path(path: &str) -> String {
-    // Заменяем обратные слэши на прямые
+    // 1. Упрощённая нормализация: unify separators and remove leading "./"
     let s = path.replace('\\', "/");
     let trimmed = s.strip_prefix("./").unwrap_or(&s);
+    let collapsed = trimmed.replace("//", "/");
 
-    // Сохраняем полную структуру директорий;
-    // при необходимости убираем повторные слэши
-    let res = trimmed.replace("//", "/");
+    // 2. Дополнительная санитация только для Windows
+    #[cfg(windows)]
+    let sanitized = {
+        // Обрабатываем каждый компонент пути отдельно, чтобы не затронуть разделители
+        let components: Vec<String> = collapsed
+            .split('/')
+            .filter(|c| !c.is_empty())
+            .map(|comp| sanitize_windows_component(comp))
+            .collect();
+        if components.is_empty() {
+            "_".to_string()
+        } else {
+            components.join("/")
+        }
+    };
+
+    #[cfg(not(windows))]
+    let sanitized = collapsed;
 
     // --- Debug log --------------------------------------------------------
     if std::env::var("BLITZ_DEBUG_PATHS").is_ok() {
-        eprintln!("[dbg] normalize_path: {} -> {}", path, res);
+        eprintln!("[dbg] normalize_path: {} -> {}", path, sanitized);
     }
     // ---------------------------------------------------------------------
-    res
+    sanitized
+}
+
+#[cfg(windows)]
+fn sanitize_windows_component(name: &str) -> String {
+
+    // 2.1 Удаляем недопустимые символы
+    let mut out: String = name
+        .chars()
+        .map(|ch| match ch {
+            '<' | '>' | ':' | '"' | '\\' | '/' | '|' | '?' | '*' => '_',
+            c if (c as u32) < 32 => '_' , // управляющие символы 0-31
+            c => c,
+        })
+        .collect();
+
+    // 2.2 Удаляем завершающие пробелы и точки
+    while out.ends_with(' ') || out.ends_with('.') {
+        out.pop();
+    }
+
+    if out.is_empty() {
+        out.push('_');
+    }
+
+    // 2.3 Проверяем зарезервированные имена (без учёта регистра и расширения)
+    let upper_no_ext = out.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if is_windows_reserved(&upper_no_ext) {
+        out.push('_');
+    }
+
+    out
+}
+
+#[cfg(windows)]
+fn is_windows_reserved(name_upper: &str) -> bool {
+    match name_upper {
+        "CON" | "PRN" | "AUX" | "NUL" |
+        "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" |
+        "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9" => true,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_path;
+
+    #[test]
+    fn test_normalize_simple() {
+        assert_eq!(normalize_path("./dir1/dir2/file.txt"), "dir1/dir2/file.txt");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_sanitization() {
+        // Недопустимые символы заменяются, пробелы/точки убираются, зарезервированные имена модифицируются
+        assert_eq!(normalize_path("CON \\foo\\bar?.txt"), "CON_/foo/bar_.txt");
+    }
 }
 
 /// Represents a single file's metadata within the Katana index.
@@ -1007,6 +1081,8 @@ fn extract_katana_shard_with_progress(
     for entry in files {
         let mut remaining = entry.size;
         if wanted.is_empty() || wanted.contains(&entry.path) {
+            // Determine if original path was absolute (Unix /... or Windows C:\...)
+            let original_absolute = entry.path.starts_with('/') || (entry.path.len() >= 2 && entry.path.chars().nth(1) == Some(':'));
             // Write this file to disk
             // Ensure path is relative, remove leading slash or drive letter if present
             let mut normalized_path = entry.path.clone();
@@ -1039,6 +1115,13 @@ fn extract_katana_shard_with_progress(
                 }
             }
             
+            // Если исходный путь был абсолютным – отбросим все промежуточные директории, оставим только имя файла
+            if original_absolute {
+                if let Some(fname) = std::path::Path::new(&normalized_path).file_name() {
+                    normalized_path = fname.to_string_lossy().into_owned();
+                }
+            }
+
             // Если путь стал пустым после нормализации (был только /), используем имя файла
             if normalized_path.is_empty() || normalized_path == "/" {
                 // Извлечь имя файла из абсолютного пути

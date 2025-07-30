@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 // macOS native drag-out implementation using `NSFilePromiseProvider`.
 // Минимальная рабочая реализация: создаёт `NSFilePromiseProvider`, запускает
 // `beginDraggingSession` и копирует файл в destination в колбэке `writePromiseToURL`.
@@ -137,7 +138,7 @@ fn get_delegate_class() -> &'static Class {
         decl.add_ivar::<*mut Object>("archive");
 
         // filePromiseProvider:writePromiseToURL:completionHandler:
-        extern "C" fn write_promise(this: &Object, _sel: Sel, _provider: id, dest_url: id, completion: id) {
+        extern "C" fn write_promise(this: &Object, _sel: Sel, _provider: id, dest_url: id, _completion: id) {
     // Оборачиваем логику в catch_unwind, чтобы паника не пересекла границу FFI
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         unsafe {

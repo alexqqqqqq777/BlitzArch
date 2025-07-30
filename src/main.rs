@@ -124,12 +124,15 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(mb) = mem_budget_mb {
                     std::env::set_var("BLITZ_MEM_BUDGET_MB", mb.to_string());
                 }
+                // Sanitize output path (Windows-invalid chars / reserved names)
+                let output_path = cli::sanitize_output_path(output);
+
                 if *progress {
                     // Create progress callback for real-time CLI display
                     let progress_callback = create_cli_progress_callback("create");
                     blitzarch::katana_stream::create_katana_archive_with_progress(
                         inputs,
-                        output,
+                        &output_path,
                         auto_threads,
                         *codec_threads,
                         mem_budget_mb,
@@ -147,7 +150,7 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
                     // Use existing katana_stream for backward compatibility
                     blitzarch::katana_stream::create_katana_archive(
                         inputs,
-                        output,
+                        &output_path,
                         auto_threads,
                         *codec_threads,
                         mem_budget_mb,
@@ -160,7 +163,12 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             } else {
-                workers::run_parallel_compression(Arc::new(command.clone()), *workers)?;
+                // Legacy sharded compression path: sanitize provided output path too
+                let mut cmd_clone = command.clone();
+                if let Commands::Create { ref mut output, .. } = cmd_clone {
+                    *output = cli::sanitize_output_path(output);
+                }
+                workers::run_parallel_compression(Arc::new(cmd_clone), *workers)?;
             }
         }
         Commands::Extract {

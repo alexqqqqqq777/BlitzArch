@@ -86,6 +86,24 @@ const pathUtils = {
 };
 
 /**
+ * Sanitize filename for cross-platform safety (Windows, macOS, Linux).
+ * Replaces invalid characters <>:"/\|?* and control chars with '_',
+ * trims trailing dots/spaces, limits length to 255 chars.
+ */
+export function sanitizeFilename(name) {
+  if (!name) return '';
+  // Replace invalid characters and control chars
+  let sanitized = name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+  // Trim trailing dots and spaces (Windows restriction)
+  sanitized = sanitized.replace(/[. ]+$/, '');
+  // Enforce max length
+  if (sanitized.length > 255) {
+    sanitized = sanitized.slice(0, 255);
+  }
+  return sanitized;
+}
+
+/**
  * Determine the optimal output directory for archive creation
  * Golden Standard Rules:
  * 1. Single file: archive goes to same directory as the file
@@ -120,26 +138,27 @@ export function generateArchiveName(filePaths) {
   }
 
   const normalizedPaths = filePaths.map(p => pathUtils.resolve(p));
+  let candidate;
 
   if (normalizedPaths.length === 1) {
-    // Single file or folder - use its name
+    // Single file or folder – use its name without extension
     const baseName = pathUtils.basename(normalizedPaths[0]);
-    // Remove extension if it's a file
     const nameWithoutExt = pathUtils.parse(baseName).name;
-    return nameWithoutExt || 'archive';
+    candidate = nameWithoutExt || 'archive';
+  } else {
+    // Multiple files – derive from common parent directory
+    const commonParent = findCommonParentDirectory(normalizedPaths);
+    const parentName = pathUtils.basename(commonParent);
+    if (parentName && parentName !== '/' && parentName !== '.') {
+      candidate = parentName;
+    } else {
+      // Fallback to timestamp
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+      candidate = `archive-${timestamp}`;
+    }
   }
 
-  // Multiple files - try to find a meaningful name
-  const commonParent = findCommonParentDirectory(normalizedPaths);
-  const parentName = pathUtils.basename(commonParent);
-  
-  if (parentName && parentName !== '/' && parentName !== '.') {
-    return parentName;
-  }
-
-  // Fallback to timestamp-based name
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-  return `archive-${timestamp}`;
+  return sanitizeFilename(candidate);
 }
 
 /**
@@ -224,12 +243,11 @@ export async function getFileInfo(filePath) {
  * Create the complete archive path with extension
  */
 export function createArchivePath(outputDir, archiveName) {
-  // Ensure the archive name has .blz extension
-  const nameWithExtension = archiveName.endsWith('.blz') 
-    ? archiveName 
-    : `${archiveName}.blz`;
-  
-  return pathUtils.normalize(outputDir + '/' + nameWithExtension);
+  // Remove .blz if already present, we will add it after sanitization
+  const base = archiveName.endsWith('.blz') ? archiveName.slice(0, -4) : archiveName;
+  const sanitized = sanitizeFilename(base);
+  const finalName = sanitized.endsWith('.blz') ? sanitized : `${sanitized}.blz`;
+  return pathUtils.normalize(outputDir + '/' + finalName);
 }
 
 /**
