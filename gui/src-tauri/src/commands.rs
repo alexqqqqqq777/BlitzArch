@@ -695,39 +695,31 @@ fn extract_archive_with_real_progress(
         eta_seconds: 0.0,
         compression_ratio: None,
     };
-    app_for_progress.emit("archive-progress", &progress_event).ok();
-};
+    let app_for_progress = app.clone();
+    app_for_progress.emit("archive-progress", &initial_progress).ok();
 
-// Ensure output directory exists
-if let Err(e) = std::fs::create_dir_all(&output_pathbuf) {
-    println!("❌ Failed to create output directory: {}", e);
-    return Err(format!("Failed to create output directory: {}", e));
-        Vec::new()
+    // Determine effective archive/output paths
+    use std::path::{Path, PathBuf};
+    let archive_pathbuf = PathBuf::from(&archive_path);
+    let output_pathbuf = if output_dir.trim().is_empty() || output_dir.trim() == "." {
+        Path::new(&archive_path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."))
     } else {
-        match read_archive_index(&archive_path, password.clone()) {
-            Ok(entries) => {
-                let mut files = Vec::new();
-                for spec in &specs_vec {
-                    // Treat the spec as a prefix for directory matching (with or without trailing slash)
-                    let prefix = format!("{}/", spec.trim_end_matches('/'));
-                    for entry in &entries {
-                        if entry.is_dir {
-                            continue;
-                        }
-                        if entry.path == *spec || entry.path.starts_with(&prefix) {
-                            files.push(entry.path.clone());
-                        }
-                    }
-                }
-                if files.is_empty() {
-                    specs_vec.clone()
-                } else {
-                    files
-                }
-            }
-            Err(_) => specs_vec.clone(),
-        }
+        PathBuf::from(&output_dir)
     };
+
+    // Prepare list of specific files (if any)
+    let specs_vec: Vec<String> = specific_files.clone().unwrap_or_default();
+    let expanded_files: Vec<String> = specs_vec.clone();
+
+    // Ensure output directory exists
+    if let Err(e) = std::fs::create_dir_all(&output_pathbuf) {
+        println!("❌ Failed to create output directory: {}", e);
+        return Err(format!("Failed to create output directory: {}", e));
+    }
+    println!("✅ Output directory verified: {}", output_pathbuf.display());
 
     // Store empty status before move
     let is_full_extraction = expanded_files.is_empty();
