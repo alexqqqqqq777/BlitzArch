@@ -1050,11 +1050,31 @@ pub async fn drag_out_extract(
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("extracted_file");
-            // Уникализируем имя, если файл уже существует в target_dir
-let dest_candidate = Path::new(&target_dir).join(file_name);
-let unique_dest = generate_unique_path(&dest_candidate);
-let extracted_file_path = unique_dest.to_string_lossy().to_string();
-            archive_result.archive_path = Some(extracted_file_path.clone());
+            // Формируем конечный путь с учётом уникализации
+            use std::path::PathBuf;
+            let dest_candidate: PathBuf = Path::new(&target_dir).join(file_name);
+            let unique_dest = generate_unique_path(&dest_candidate);
+
+            // Найдём фактически извлечённый файл (он повторяет структуру внутри архива)
+            let extracted_original: PathBuf = Path::new(&target_dir).join(&file_path);
+
+            // Если файл существует и путь отличается – переименуем/переместим
+            if extracted_original.exists() {
+                // Создаём директорию назначения, если её ещё нет
+                if let Some(parent) = unique_dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(e) = std::fs::rename(&extracted_original, &unique_dest) {
+                    println!("⚠️  Не удалось переименовать файл {:?} -> {:?}: {}", extracted_original, unique_dest, e);
+                }
+            } else {
+                // Если движок извлёк без поддиректорий (редкий случай), проверяем исходный dest_candidate
+                if dest_candidate.exists() && dest_candidate != unique_dest {
+                    let _ = std::fs::rename(&dest_candidate, &unique_dest);
+                }
+            }
+
+            archive_result.archive_path = Some(unique_dest.to_string_lossy().to_string());
             println!("✅ Drag-out extraction successful: {:?}", archive_result.archive_path);
             Ok(archive_result)
         }
