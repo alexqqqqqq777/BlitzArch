@@ -60,9 +60,9 @@ jobs:
           pnpm install
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        with:
-          projectPath: gui
+        run: |
+          cd gui
+          pnpm tauri build
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
