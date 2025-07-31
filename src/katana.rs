@@ -58,6 +58,44 @@ fn data_len_without_footer(f: &mut File, file_len: u64) -> std::io::Result<u64> 
     Ok(file_len)
 }
 
+/// Reads the 24-byte Katana archive footer and returns:
+/// `(compressed_index_size, compressed_index_offset, json_index_size)`.
+///
+/// This helper eliminates duplicated footer-parsing logic and guarantees that
+/// all call-sites perform identical validation on Windows, macOS and Linux.
+/// It also honours the optional BLAKE3 integrity footer by utilising
+/// `data_len_without_footer`.
+pub fn read_katana_footer(f: &mut File) -> Result<(u64, u64, u64), Box<dyn Error>> {
+    use std::io::{Read, Seek};
+
+    let file_len = f.metadata()?.len();
+    let data_len = data_len_without_footer(f, file_len)?;
+    if data_len < 24 {
+        return Err("File too small".into());
+    }
+
+    // Seek to footer start and read the 24-byte structure.
+    f.seek(SeekFrom::Start(data_len - 24))?;
+    let mut buf = [0u8; 24];
+    f.read_exact(&mut buf)?;
+
+    let (comp_size_bytes, rest) = buf.split_at(8);
+    let (json_size_bytes, magic_bytes) = rest.split_at(8);
+
+    // Helpful debug: print the raw magic that was read.
+    eprintln!("[katana-debug] magic_bytes={:?}", magic_bytes);
+
+    if magic_bytes != KATANA_MAGIC {
+        return Err("Not a Katana archive".into());
+    }
+
+    let comp_size = u64::from_le_bytes(comp_size_bytes.try_into()?);
+    let json_size = u64::from_le_bytes(json_size_bytes.try_into()?);
+    let comp_offset = data_len - 24 - comp_size;
+
+    Ok((comp_size, comp_offset, json_size))
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt; // mode()
 use std::path::{Path, PathBuf};
@@ -680,20 +718,10 @@ pub fn list_katana_files(
     if data_len < 24 {
         return Err("File too small".into());
     }
-    // Read footer
-    f.seek(SeekFrom::Start(data_len - 24))?;
-    let mut buf_footer = [0u8; 24];
-    f.read_exact(&mut buf_footer)?;
-    let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
-    let (idx_json_size_bytes, magic_bytes) = rest.split_at(8);
-    if magic_bytes != KATANA_MAGIC {
-        return Err("Not a Katana archive".into());
-    }
-    let idx_comp_size = u64::from_le_bytes(idx_comp_size_bytes.try_into().unwrap());
-    let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
+    // Read footer using unified helper
+    let (idx_comp_size, idx_comp_offset, _idx_json_size) = read_katana_footer(&mut f)?;
 
     // Read compressed index
-    let idx_comp_offset = data_len - 24 - idx_comp_size;
     f.seek(SeekFrom::Start(idx_comp_offset))?;
     let mut idx_comp = vec![0u8; idx_comp_size as usize];
     f.read_exact(&mut idx_comp)?;
@@ -805,20 +833,10 @@ where
     if data_len < 24 {
         return Err("File too small".into());
     }
-    // Read footer
-    f.seek(SeekFrom::Start(data_len - 24))?;
-    let mut buf_footer = [0u8; 24];
-    f.read_exact(&mut buf_footer)?;
-    let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
-    let (idx_json_size_bytes, magic_bytes) = rest.split_at(8);
-    if magic_bytes != KATANA_MAGIC {
-        return Err("Not a Katana archive".into());
-    }
-    let idx_comp_size = u64::from_le_bytes(idx_comp_size_bytes.try_into().unwrap());
-    let _idx_json_size = u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap());
+    // Read footer using unified helper
+    let (idx_comp_size, idx_comp_offset, _idx_json_size) = read_katana_footer(&mut f)?;
 
     // Read compressed index
-    let idx_comp_offset = data_len - 24 - idx_comp_size;
     f.seek(SeekFrom::Start(idx_comp_offset))?;
     let mut idx_comp = vec![0u8; idx_comp_size as usize];
     f.read_exact(&mut idx_comp)?;

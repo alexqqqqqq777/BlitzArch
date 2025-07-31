@@ -61,6 +61,111 @@ pub struct SystemMetrics {
 
 /// Возвращает уникальный путь, добавляя суффикс " copy" аналогично macOS Finder.
 /// Пример: photo.png -> photo copy.png, photo copy 2.png, ...
+/// Sanitize a filename to be safe on all supported platforms (Windows, macOS, Linux).
+///
+/// * Replaces characters that are illegal in NTFS (`< > : " / \\ | ? *` and ASCII control chars)
+///   with an underscore.
+/// * Trims trailing dots and spaces that Windows forbids.
+/// * Avoids reserved DOS device names like `CON`, `NUL`, `PRN`, `COM1`-`COM9`, `LPT1`-`LPT9` by
+///   prefixing them with an underscore.
+/// * Falls back to the literal string `archive` if the result becomes empty.
+fn sanitize_filename(name: &str) -> String {
+    // Characters that are disallowed on Windows filesystems.
+    const FORBIDDEN_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+    let mut cleaned = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || FORBIDDEN_CHARS.contains(&c) {
+                '_' // replace forbidden or control characters
+            } else {
+                c
+            }
+        })
+        .collect::<String>();
+
+    // Windows does not allow filenames ending with a dot or space.
+    while cleaned.ends_with('.') || cleaned.ends_with(' ') {
+        cleaned.pop();
+    }
+
+    // Avoid reserved device names on Windows regardless of platform – to stay portable.
+    let upper = cleaned.to_ascii_uppercase();
+    const RESERVED: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    if RESERVED.contains(&upper.as_str()) {
+        cleaned = format!("_{}", cleaned);
+    }
+
+    if cleaned.is_empty() {
+        "archive".to_string()
+    } else {
+        cleaned
+    }
+}
+
+/// Ensure a parent directory exists for the provided path. If creation fails we still return the
+/// original path so that the calling code can surface the error.
+fn ensure_parent_dir(path: &Path) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+}
+
+/// Returns a sanitized `PathBuf` suitable for writing the output archive.
+///
+/// * If the file name part contains path separators (i.e. GUI mistakenly passed an absolute path
+///   instead of just a name) we keep only the final component.
+/// * The component is sanitised with `sanitize_filename` and given a `.blz` extension if it does
+///   not already have one.
+fn build_output_path(output_dir: &str, raw_archive_name: &str) -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    // Some GUIs accidentally pass a *full* absolute path here (or even the same path twice),
+    // so `raw_archive_name` may itself contain additional `\\` or `/` separators. We need to
+    // defensively peel off directory components until we get a clean file name stem.
+    let mut stem_candidate = raw_archive_name;
+    // Loop at most a handful of times – in practice one pass is enough, but stay safe.
+    for _ in 0..4 {
+        // If the candidate still contains a path separator, take only the final component.
+        if stem_candidate.contains('/') || stem_candidate.contains('\\') {
+            let tmp = Path::new(stem_candidate)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("archive");
+            stem_candidate = tmp;
+        } else {
+            break;
+        }
+    }
+    // After the loop `stem_candidate` is guaranteed to be just a file name, without any
+    // directory separators. Now sanitise it.
+    let stem = stem_candidate;
+    let safe_stem = sanitize_filename(stem);
+
+    // Need the original Path object for extension check
+    let raw_path = Path::new(raw_archive_name);
+
+    let mut filename = if raw_path
+        .extension()
+        .map(|e| e.to_str().unwrap_or("") == "blz")
+        .unwrap_or(false)
+    {
+        // Already has .blz (case-sensitive check above) – rebuild with safe stem but keep ext
+        format!("{}.blz", safe_stem)
+    } else {
+        format!("{}.blz", safe_stem)
+    };
+
+    // Final join
+    let mut path_buf = PathBuf::from(output_dir);
+    path_buf.push(filename);
+
+    ensure_parent_dir(&path_buf);
+    path_buf
+}
+
 fn generate_unique_path(original: &Path) -> std::path::PathBuf {
     if !original.exists() {
         return original.to_path_buf();
@@ -243,8 +348,18 @@ fn create_archive_with_real_progress(
     
     // Call engine directly with progress callback
     // Обеспечиваем уникальный путь архива при асинхронном варианте
-let output_pathbuf = generate_unique_path(Path::new(&output_path));
-let output_path = output_pathbuf.to_string_lossy().to_string();
+// Sanitize output path coming from the frontend and ensure parent dir exists
+    // Split only on the FIRST '/' which separates directory and name when frontend accidentally concatenates
+    let (dir_part, name_part) = if let Some(pos) = output_path.find('/') {
+        (&output_path[..pos], &output_path[pos+1..])
+    } else {
+        (".", &output_path[..])
+    };
+    let sanitized_output = build_output_path(dir_part, name_part);
+    let output_pathbuf = generate_unique_path(&sanitized_output);
+    println!("🛠️ build_output_path => sanitized_output: {:?}", sanitized_output);
+    println!("🛠️ generate_unique_path => final_path: {:?}", output_pathbuf);
+    let output_path = output_pathbuf.to_string_lossy().to_string();
 
 let result = create_katana_archive_with_progress(
         &input_paths,
@@ -424,7 +539,8 @@ pub fn create_archive(
     cmd.arg("create");
     
     // Output path
-    let mut archive_pathbuf = Path::new(&output_dir).join(format!("{}.blz", archive_name));
+    // Build safe archive path
+    let mut archive_pathbuf = build_output_path(&output_dir, &archive_name);
 // Автоматический выбор уникального имени архива
 archive_pathbuf = generate_unique_path(&archive_pathbuf);
 let archive_path = archive_pathbuf.to_string_lossy().to_string();
@@ -552,6 +668,7 @@ fn extract_archive_with_real_progress(
     specific_files: Option<Vec<String>>,
 ) -> Result<ArchiveResult, String> {
     println!("🔄 Extracting archive async: {} to {}", archive_path, output_dir);
+    // NOTE: do not normalize path here; list_archive_async uses the raw path and succeeds
     println!("🔧 Debug params: strip_components={:?}, specific_files={:?}", strip_components, specific_files);
     
     let password = normalize_password(password);
@@ -582,7 +699,9 @@ fn extract_archive_with_real_progress(
     
     // Convert string paths to PathBuf
     let archive_pathbuf = std::path::PathBuf::from(&archive_path);
-    let output_pathbuf = std::path::PathBuf::from(&output_dir);
+    // If frontend passed an empty output_dir, default to current directory to avoid invalid path
+    let effective_output_dir = if output_dir.trim().is_empty() { ".".to_string() } else { output_dir.clone() };
+    let output_pathbuf = std::path::PathBuf::from(&effective_output_dir);
     
     // Expand directories in specific_files into individual file paths
     let specs_vec: Vec<String> = specific_files.clone().unwrap_or_default();
@@ -1187,6 +1306,7 @@ fn read_archive_index(archive_path: &str, _password: Option<String>) -> Result<V
             file_len
         }
     };
+    println!("🔍 file_len={}, data_len={}", file_len, data_len);
     if data_len < 24 {
         return Err("File too small or not a Katana archive".into());
     }
@@ -1197,6 +1317,10 @@ fn read_archive_index(archive_path: &str, _password: Option<String>) -> Result<V
     f.read_exact(&mut buf_footer)?;
     let (idx_comp_size_bytes, rest) = buf_footer.split_at(8);
     let (idx_json_size_bytes, magic_bytes) = rest.split_at(8);
+    println!("🔍 Footer raw bytes: {:02X?}", buf_footer);
+    println!("🔍 idx_comp_size_le={}", u64::from_le_bytes(idx_comp_size_bytes.try_into().unwrap()));
+    println!("🔍 idx_json_size_le={}", u64::from_le_bytes(idx_json_size_bytes.try_into().unwrap()));
+    println!("🔍 magic_bytes={:?}", std::str::from_utf8(magic_bytes).unwrap_or("<nonutf8>"));
     const LOCAL_KATANA_MAGIC: &[u8; 8] = b"KATIDX01";
     if magic_bytes != LOCAL_KATANA_MAGIC {
         return Err("Not a Katana archive".into());

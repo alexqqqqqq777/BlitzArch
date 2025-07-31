@@ -14,6 +14,8 @@ blitzarch = { path = "../../../" }
 objc = "0.2"
 objc_exception = "0.1"
 block2 = "0.5"
+# New Rust-native Objective-C bindings (optional, behind the `objc2_backend` feature)
+
 
 
 

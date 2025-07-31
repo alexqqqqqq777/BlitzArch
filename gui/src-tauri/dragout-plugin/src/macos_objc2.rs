@@ -1,3 +1,4 @@
+#![cfg(all(target_os = "macos", feature = "objc2_backend"))]
 // macOS native drag-out implementation using objc2 / AppKit wrappers.
 // This is a work-in-progress replacement for the previous cocoa/objc implementation.
 // Initially it only logs calls; functionality will be ported in subsequent commits.
