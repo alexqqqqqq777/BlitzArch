@@ -695,18 +695,13 @@ fn extract_archive_with_real_progress(
         eta_seconds: 0.0,
         compression_ratio: None,
     };
-    app.emit("archive-progress", &initial_progress).ok();
-    
-    // Convert string paths to PathBuf
-    let archive_pathbuf = std::path::PathBuf::from(&archive_path);
-    // If frontend passed an empty output_dir, default to current directory to avoid invalid path
-    let effective_output_dir = if output_dir.trim().is_empty() { ".".to_string() } else { output_dir.clone() };
-    let output_pathbuf = std::path::PathBuf::from(&effective_output_dir);
-    
-    // Expand directories in specific_files into individual file paths
-    let specs_vec: Vec<String> = specific_files.clone().unwrap_or_default();
+    app_for_progress.emit("archive-progress", &progress_event).ok();
+};
 
-    let expanded_files: Vec<String> = if specs_vec.is_empty() {
+// Ensure output directory exists
+if let Err(e) = std::fs::create_dir_all(&output_pathbuf) {
+    println!("❌ Failed to create output directory: {}", e);
+    return Err(format!("Failed to create output directory: {}", e));
         Vec::new()
     } else {
         match read_archive_index(&archive_path, password.clone()) {
@@ -776,7 +771,7 @@ fn extract_archive_with_real_progress(
         println!("❌ Failed to create output directory: {}", e);
         return Err(format!("Failed to create output directory: {}", e));
     }
-    println!("✅ Output directory verified: {}", output_dir);
+    println!("✅ Output directory verified: {}", output_pathbuf.display());
     
     // Call engine directly with progress
     println!("🚀 Calling extract_katana_archive_with_progress...");
