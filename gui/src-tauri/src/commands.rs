@@ -712,7 +712,29 @@ fn extract_archive_with_real_progress(
 
     // Prepare list of specific files (if any)
     let specs_vec: Vec<String> = specific_files.clone().unwrap_or_default();
-    let expanded_files: Vec<String> = specs_vec.clone();
+    let expanded_files: Vec<String> = if specs_vec.is_empty() {
+        Vec::new()
+    } else {
+        match read_archive_index(&archive_path, password.clone()) {
+            Ok(entries) => {
+                let mut files = Vec::new();
+                for spec in &specs_vec {
+                    // Поддержка выбора директории: берём всё, что совпадает или лежит внутри префикса
+                    let prefix = format!("{}/", spec.trim_end_matches('/'));
+                    for entry in &entries {
+                        if entry.is_dir {
+                            continue;
+                        }
+                        if entry.path == *spec || entry.path.starts_with(&prefix) {
+                            files.push(entry.path.clone());
+                        }
+                    }
+                }
+                if files.is_empty() { specs_vec.clone() } else { files }
+            }
+            Err(_) => specs_vec.clone(),
+        }
+    };
 
     // Ensure output directory exists
     if let Err(e) = std::fs::create_dir_all(&output_pathbuf) {
