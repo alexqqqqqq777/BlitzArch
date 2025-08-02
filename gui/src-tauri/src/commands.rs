@@ -14,8 +14,46 @@ fn normalize_password(p: Option<String>) -> Option<String> {
     }
 }
 use std::fs;
+use std::path::{Path, PathBuf};
 use sysinfo::{System, Disks};
 use tauri::AppHandle;
+
+/// Resolve the path to the standalone BlitzArch CLI binary in an OS-agnostic way.
+/// Priority:
+/// 1. Environment variable `BLITZARCH_CLI_PATH` if set.
+/// 2. Same directory as current executable.
+/// 3. macOS bundle Resources directory (../Resources/blitzarch).
+/// 4. Fallback to relying on `PATH` ("blitzarch" / "blitzarch.exe").
+fn resolve_blitzarch_cli() -> PathBuf {
+    // 1. Env override
+    if let Ok(p) = std::env::var("BLITZARCH_CLI_PATH") {
+        let pb = PathBuf::from(&p);
+        if pb.exists() { return pb; }
+    }
+
+    // 2. Same directory as the running executable.
+    if let Ok(exec_path) = std::env::current_exe() {
+        if let Some(dir) = exec_path.parent() {
+            let candidate = dir.join(cli_filename());
+            if candidate.exists() { return candidate; }
+        }
+
+        // 3. macOS .app bundle Resources
+        #[cfg(target_os = "macos")]
+        if let Some(bundle_root) = exec_path.parent().and_then(|p| p.parent()) { // .../Contents
+            let res = bundle_root.join("Resources").join("blitzarch");
+            if res.exists() { return res; }
+        }
+    }
+
+    // 4. Fallback – rely on PATH; Command will handle lookup.
+    PathBuf::from(cli_filename())
+}
+
+#[cfg(target_os = "windows")]
+fn cli_filename() -> &'static str { "blitzarch.exe" }
+#[cfg(not(target_os = "windows"))]
+fn cli_filename() -> &'static str { "blitzarch" }
 use tauri::Emitter;
 
 
@@ -535,7 +573,7 @@ pub fn create_archive(
     let password = normalize_password(password);
     
     // Build BlitzArch command
-    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    let mut cmd = Command::new(resolve_blitzarch_cli());
     cmd.arg("create");
     
     // Output path
@@ -924,7 +962,7 @@ pub fn extract_archive(
     let password = normalize_password(password);
     
     // Build BlitzArch extract command
-    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    let mut cmd = Command::new(resolve_blitzarch_cli());
     cmd.arg("extract");
     
     // Input archive
@@ -986,7 +1024,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
     println!("📋 Listing archive contents: {}", archive_path);
     
     // Build BlitzArch list command
-    let mut cmd = Command::new("/Users/oleksandr/Desktop/Development/blitzarch/target/release/blitzarch");
+    let mut cmd = Command::new(resolve_blitzarch_cli());
     cmd.arg("list");
     cmd.arg(&archive_path);
     
