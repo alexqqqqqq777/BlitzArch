@@ -1,4 +1,4 @@
-use std::path::Path;
+
 use std::time::{SystemTime, Duration};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ fn normalize_password(p: Option<String>) -> Option<String> {
     }
 }
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use sysinfo::{System, Disks};
 use tauri::AppHandle;
 
@@ -737,7 +737,7 @@ fn extract_archive_with_real_progress(
     app_for_progress.emit("archive-progress", &initial_progress).ok();
 
     // Determine effective archive/output paths
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     let archive_pathbuf = PathBuf::from(&archive_path);
     let output_pathbuf = if output_dir.trim().is_empty() || output_dir.trim() == "." {
         Path::new(&archive_path)
