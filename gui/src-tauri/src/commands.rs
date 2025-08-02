@@ -14,7 +14,7 @@ fn normalize_password(p: Option<String>) -> Option<String> {
     }
 }
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sysinfo::{System, Disks};
 use tauri::AppHandle;
 
@@ -158,7 +158,7 @@ fn ensure_parent_dir(path: &Path) {
 /// * The component is sanitised with `sanitize_filename` and given a `.blz` extension if it does
 ///   not already have one.
 fn build_output_path(output_dir: &str, raw_archive_name: &str) -> std::path::PathBuf {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     // Some GUIs accidentally pass a *full* absolute path here (or even the same path twice),
     // so `raw_archive_name` may itself contain additional `\\` or `/` separators. We need to
@@ -737,7 +737,7 @@ fn extract_archive_with_real_progress(
     app_for_progress.emit("archive-progress", &initial_progress).ok();
 
     // Determine effective archive/output paths
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     let archive_pathbuf = PathBuf::from(&archive_path);
     let output_pathbuf = if output_dir.trim().is_empty() || output_dir.trim() == "." {
         Path::new(&archive_path)
@@ -1111,7 +1111,7 @@ pub async fn drag_out_extract(
                 .and_then(|name| name.to_str())
                 .unwrap_or("extracted_file");
             // Формируем конечный путь с учётом уникализации
-            use std::path::PathBuf;
+            use std::path::{Path, PathBuf};
             let dest_candidate: PathBuf = Path::new(&target_dir).join(file_name);
             let unique_dest = generate_unique_path(&dest_candidate);
 
