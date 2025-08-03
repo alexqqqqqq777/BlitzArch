@@ -1,4 +1,4 @@
-name: macOS Universal Release
+# Deprecated workflow replaced by release-multiplatform.yml
 
 on:
   push:
