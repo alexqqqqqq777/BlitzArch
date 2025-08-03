@@ -57,6 +57,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install GUI dependencies
+        working-directory: gui
+        run: npm ci
+
       - name: Build Tauri GUI (windows)
         uses: tauri-apps/tauri-action@v0.5.22
         env:
