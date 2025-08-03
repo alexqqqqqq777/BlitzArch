@@ -119,6 +119,19 @@ fn run_timed_command(command_str: String) -> Result<(RunMetrics, String, String)
 }
 
 fn get_blitzarch_executable_path() -> Result<PathBuf, String> {
+    // Try environment override or system-wide install first
+    if let Ok(explicit) = env::var("BLITZARCH_PATH") {
+        let p = PathBuf::from(explicit);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+    let system_path = PathBuf::from("/usr/local/bin/blitzarch");
+    if system_path.exists() {
+        return Ok(system_path);
+    }
+
+    // Fallback to cargo build inside the workspace
     let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
     let exe_path = PathBuf::from(format!("{}/release/blitzarch", target_dir));
     use std::sync::Once;
@@ -727,6 +740,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let profiles = vec![
         ("BlitzArch", "L3_katana_mem_500"),   // фиксированный лимит 500 MiB
         ("BlitzArch", "L3_katana_mem_3pct"), // лимит 3% от системной памяти (~500 MiB при 16 ГБ)
+        ("tar+zstd", "default"),              // конкурент на tar+zstd
     ];
 
     /* Legacy baseline profiles – commented out
@@ -758,7 +772,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Dynamically discover datasets in ./dataset (each subdir is a separate dataset)
     let mut datasets: Vec<(String, String)> = Vec::new();
-    let dataset_root = Path::new("/Users/oleksandr/Desktop/Development/BTSL");
+    let dataset_root_env = env::var("DATASET_ROOT").unwrap_or_else(|_| "/home/ubuntu/datasets".to_string());
+    let dataset_root = Path::new(&dataset_root_env);
     if dataset_root.exists() {
         for entry in fs::read_dir(dataset_root)? {
             let entry = entry?;
