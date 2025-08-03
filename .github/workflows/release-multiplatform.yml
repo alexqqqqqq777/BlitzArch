@@ -6,6 +6,10 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
 
+concurrency:
+  group: blitzarch-release
+  cancel-in-progress: true
+
 jobs:
   build-macos-arm64:
     name: macOS GUI (arm64)
@@ -33,12 +37,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5.22
         env:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+
         with:
           args: --target aarch64-apple-darwin
           releaseDraft: false
