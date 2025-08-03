@@ -24,7 +24,7 @@ jobs:
 
       #––– Build & bundle via Tauri –––––––––––––––––––––––––––––––––––––––––––
       - name: Build Tauri (universal)
-        uses: tauri-apps/tauri-action@v2
+        uses: tauri-apps/tauri-action@v1
         env:
           # Code-signing / notarization secrets – set in repo → Settings → Secrets and variables → Actions
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -35,7 +35,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         with:
           # Build a universal binary (arm64 + x86_64) and create .app / DMG
-          tauriBuildArgs: --target universal-apple-darwin
+          args: --target universal-apple-darwin
           # Attach artefacts to workflow run ☟
           releaseDraft: true
 
