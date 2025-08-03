@@ -388,12 +388,21 @@ fn create_archive_with_real_progress(
     // Обеспечиваем уникальный путь архива при асинхронном варианте
 // Sanitize output path coming from the frontend and ensure parent dir exists
     // Split only on the FIRST '/' which separates directory and name when frontend accidentally concatenates
-    let (dir_part, name_part) = if let Some(pos) = output_path.find('/') {
-        (&output_path[..pos], &output_path[pos+1..])
+    // If frontend passes full `dir/name`, respect it. Otherwise fallback to parent dir of first input.
+    // dir_part as owned String to allow mutation
+    let (mut dir_part, name_part) = if let Some(pos) = output_path.find('/') {
+        (output_path[..pos].to_string(), &output_path[pos+1..])
     } else {
-        (".", &output_path[..])
+        (".".to_string(), &output_path[..])
     };
-    let sanitized_output = build_output_path(dir_part, name_part);
+    if dir_part == "." || dir_part.trim().is_empty() {
+        if let Some(first_input) = input_paths.first() {
+            if let Some(parent) = first_input.parent() {
+                dir_part = parent.to_string_lossy().to_string();
+            }
+        }
+    }
+    let sanitized_output = build_output_path(&dir_part, name_part);
     let output_pathbuf = generate_unique_path(&sanitized_output);
     println!("🛠️ build_output_path => sanitized_output: {:?}", sanitized_output);
     println!("🛠️ generate_unique_path => final_path: {:?}", output_pathbuf);
@@ -1075,6 +1084,20 @@ pub async fn drag_out_extract(
     mut password: Option<String>,
 ) -> Result<ArchiveResult, String> {
     println!("🎯 Drag-out extracting file: {} from {}", file_path, archive_path);
+    // On macOS the native drag-out plugin will perform extraction via NSFilePromiseProvider.
+    // To avoid double work and race conditions we exit early.
+    #[cfg(target_os = "macos")]
+    {
+        println!("🛑 drag_out_extract noop on macOS – handled by native plugin");
+        return Ok(ArchiveResult {
+            success: true,
+            output: None,
+            error: None,
+            archive_path: None,
+            stats: None,
+            ..Default::default()
+        });
+    }
     
         // Normalize empty password value coming from the frontend
     password = normalize_password(password);
@@ -1090,7 +1113,14 @@ pub async fn drag_out_extract(
         });
     }
     
-    // Extract single file to target directory
+    // Determine final unique destination *before* extraction to avoid extra rename
+    let file_name_only = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("extracted_file");
+    let pre_dest_candidate = std::path::Path::new(&target_dir).join(file_name_only);
+    let unique_dest_path = generate_unique_path(&pre_dest_candidate);
+    // Extract single file to target directory (may include subdirs); we will copy if needed later
     let specific_files = vec![file_path.clone()];
     
     // Use existing extract logic
@@ -1112,8 +1142,8 @@ pub async fn drag_out_extract(
                 .unwrap_or("extracted_file");
             // Формируем конечный путь с учётом уникализации
             use std::path::{Path, PathBuf};
-            let dest_candidate: PathBuf = Path::new(&target_dir).join(file_name);
-            let unique_dest = generate_unique_path(&dest_candidate);
+            let dest_candidate: PathBuf = unique_dest_path.clone();
+            let unique_dest = dest_candidate.clone();
 
             // Найдём фактически извлечённый файл (он повторяет структуру внутри архива)
             let extracted_original: PathBuf = Path::new(&target_dir).join(&file_path);
@@ -1124,13 +1154,23 @@ pub async fn drag_out_extract(
                 if let Some(parent) = unique_dest.parent() {
                     let _ = std::fs::create_dir_all(parent);
                 }
-                if let Err(e) = std::fs::rename(&extracted_original, &unique_dest) {
-                    println!("⚠️  Не удалось переименовать файл {:?} -> {:?}: {}", extracted_original, unique_dest, e);
+                // Copy + remove to preserve open file handle in Finder
+                match std::fs::copy(&extracted_original, &unique_dest) {
+                    Ok(_) => {
+                        let _ = std::fs::remove_file(&extracted_original);
+                    }
+                    Err(e) => {
+                        println!("⚠️  copy {:?} -> {:?} failed: {}. Falling back to rename", extracted_original, unique_dest, e);
+                        let _ = std::fs::rename(&extracted_original, &unique_dest);
+                    }
                 }
             } else {
                 // Если движок извлёк без поддиректорий (редкий случай), проверяем исходный dest_candidate
                 if dest_candidate.exists() && dest_candidate != unique_dest {
-                    let _ = std::fs::rename(&dest_candidate, &unique_dest);
+                    match std::fs::copy(&dest_candidate, &unique_dest) {
+                        Ok(_) => { let _ = std::fs::remove_file(&dest_candidate); },
+                        Err(e) => { println!("⚠️  copy fallback failed: {}", e); }
+                    }
                 }
             }
 

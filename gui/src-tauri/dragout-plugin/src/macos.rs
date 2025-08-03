@@ -145,6 +145,7 @@ fn get_delegate_class() -> &'static Class {
             use std::ffi::CStr;
             use std::os::raw::c_char;
             use std::path::{Path, PathBuf};
+            use objc::runtime::Object;
 
             let path_ptr: *mut Object = *this.get_ivar("path");
             let arch_ptr: *mut Object = *this.get_ivar("archive");
@@ -193,6 +194,23 @@ fn get_delegate_class() -> &'static Class {
             ) {
                 Ok(_) => println!("[dragout] extracted {} -> {}", rel_path, dest_path.display()),
                 Err(e) => println!("[dragout][err] extract failed: {:?}", e),
+            }
+
+            // Invoke completion handler block with nil to signal success
+            if !_completion.is_null() {
+                #[repr(C)]
+                struct BlockLiteral {
+                    isa: *const std::ffi::c_void,
+                    flags: i32,
+                    reserved: i32,
+                    invoke: extern "C" fn(*mut BlockLiteral, *mut Object),
+                }
+                let block_ptr = _completion as *mut BlockLiteral;
+                if !block_ptr.is_null() {
+                    let invoke_fn = (*block_ptr).invoke;
+                    // Call with nil error
+                    invoke_fn(block_ptr, std::ptr::null_mut());
+                }
             }
         }
     }));
@@ -272,18 +290,6 @@ fn get_delegate_class() -> &'static Class {
                 let dest_root = PathBuf::from(&dest_dir);
                 if let Err(e) = std::fs::create_dir_all(&dest_root) {
                     println!("[dragout][err] create_dir_all failed: {:?}", e);
-                }
-                println!("[dragout] names_promised extracting '{}' to '{}'", rel_path, dest_root.display());
-                let files = vec![rel_path_pb.clone()];
-                match blitzarch::extract::extract_files(
-                    Path::new(&arch_path),
-                    &files,
-                    None,
-                    Some(dest_root.as_path()),
-                    None,
-                ) {
-                    Ok(_) => println!("[dragout] names_promised extracted"),
-                    Err(e) => println!("[dragout][err] names_promised extract failed: {:?}", e),
                 }
                 let filename_ns: id = msg_send![src_ns, lastPathComponent];
                 let arr = NSArray::arrayWithObject(nil, filename_ns);

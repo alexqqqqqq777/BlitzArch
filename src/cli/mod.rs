@@ -29,9 +29,6 @@ pub enum Commands {
         #[arg(long, default_value_t = 3)]
         level: i32,
 
-        /// Disable the high-performance Katana format (enabled by default).
-        #[arg(long = "no-katana", action = clap::ArgAction::SetFalse, default_value_t = true)]
-        katana: bool,
 
         /// Number of parallel threads to use. [0 = auto-detect based on CPU cores]
         #[arg(long, default_value_t = 0)]
@@ -117,6 +114,7 @@ pub enum Commands {
         /// Show real-time progress during archive extraction.
         #[arg(long)]
         progress: bool,
+
     },
 
     /// List the contents of an archive without extracting it.

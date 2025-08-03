@@ -195,11 +195,31 @@ class TauriBlitzArchEngine {
       console.log('  - options.specificFiles:', options.specificFiles);
       console.log('  - stripComponents (initial):', stripComponents);
 
-    // For selective extraction (specificFiles) disable auto-strip and force 0,
-    // otherwise engine won't find path matches and will extract all content.
+    // When extracting only specific files we need to strip the common leading
+    // directory segments so that files appear directly in the chosen folder
+    // (without redundant parent directories).
     if (options.specificFiles && options.specificFiles.length > 0) {
-      console.log('🎯 Using specificFiles mode: stripComponents = 0');
-      stripComponents = 0;
+      const pathArrays = options.specificFiles
+        .filter(p => typeof p === 'string')
+        .map(p => p.split('/').filter(Boolean));
+
+      if (pathArrays.length > 0) {
+        const minLen = Math.min(...pathArrays.map(arr => arr.length));
+        let commonDepth = 0;
+        for (let i = 0; i < minLen; i++) {
+          const segment = pathArrays[0][i];
+          if (pathArrays.every(arr => arr[i] === segment)) {
+            commonDepth++;
+          } else {
+            break;
+          }
+        }
+        stripComponents = Math.max(commonDepth - 1, 0);
+        console.log(`🎯 specificFiles mode: computed stripComponents = ${stripComponents}`);
+      } else {
+        stripComponents = 0;
+        console.log('🎯 specificFiles mode: no valid paths, stripComponents = 0');
+      }
     } else if (stripComponents === undefined && options.autoStripComponents !== false) {
       console.log('🤖 Calling calculateStripComponents...');
       stripComponents = await this.calculateStripComponents(archivePath);

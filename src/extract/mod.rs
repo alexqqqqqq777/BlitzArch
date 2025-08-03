@@ -147,6 +147,35 @@ pub fn list_files(file: File) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// -----------------------------------------------------------------------------
+// Compatibility wrapper for CLI-runner until it is fully migrated
+// -----------------------------------------------------------------------------
+use crate::progress::ProgressState;
+
+#[allow(clippy::too_many_arguments)]
+pub fn katana_extract(
+    archive_path: &Path,
+    selected_files: &[PathBuf],
+    output_dir: &Option<PathBuf>,
+    strip_components: Option<u32>,
+    password: Option<&str>,
+    progress_callback: Option<Box<dyn Fn(ProgressState) + Send + Sync>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let out_dir: &Path = match output_dir {
+        Some(p) => p.as_path(),
+        None => std::path::Path::new("."),
+    };
+
+    crate::katana::extract_katana_archive_with_progress(
+        archive_path,
+        out_dir,
+        selected_files,
+        password.map(|s| s.to_string()),
+        strip_components,
+        progress_callback,
+    )
+}
+
 /// Extracts files from an archive.
 ///
 /// This is the main entry point for the extraction process. It handles both encrypted and unencrypted

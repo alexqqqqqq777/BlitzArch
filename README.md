@@ -93,9 +93,6 @@ blitzarch create --output my_archive.blz --level 7 ./source_folder
 # Best-ratio mode (level 12, slow & RAM-heavy)
 blitzarch create --output my_archive.blz --level 12 ./source_folder
 
-# Disable Katana and fall back to a tar-like container with Zstandard
-blitzarch create --no-katana --output legacy.tar.zst ./source_folder
-
 # Encrypt an archive with a password
 blitzarch create --output secret.blz --password "your-password" ./private_docs
 ```
@@ -147,8 +144,7 @@ BlitzArch exposes several power-user flags beyond the common `create / extract /
 
 | Flag | Purpose |
 |------|---------|
-| `--no-katana` | Switch off Katana and use a simple tar-like container compressed with Zstandard. |
-| `--adaptive` | Stores incompressible chunks instead of compressing them, saving CPU time on large binary blobs. **Ignored for Katana (default) archives; only applies with `--no-katana`.** |
+| `--adaptive` | Skips compression for blocks detected as incompressible, saving CPU time on large binary blobs. Katana does this automatically; this flag mostly benefits legacy tar-like workflows via the library API.|
 | `--memory-budget N` | Limit RAM used by Katana compression. Accepts: absolute size in **MiB** (e.g. `500`), or percentage of system RAM when suffixed with `%` (e.g. `50%`). `0` or omitted = unlimited. Katana auto-adjusts codec threads to fit the budget. |
 | `--use-lzma2` / `--lz-level N` | Switch the compressor from Zstandard (default) to multi-threaded LZMA2. Helpful when maximum ratio is critical and extra CPU time/RAM is acceptable. |
 | `--bundle-size N` | Target bundle size in **MiB** for Katana archives. Larger bundles improve ratio; smaller favour parallelism. Default: **32 MiB**. |
@@ -159,7 +155,7 @@ BlitzArch exposes several power-user flags beyond the common `create / extract /
 | `--no-adaptive` | Disable adaptive compression (force compression of all data, even incompressible). By default, BlitzArch skips compression for files that don't benefit from it. |
 | `--progress` | Show real-time progress bar during `create` or `extract` operations. Displays speed, ETA, and completion percentage. |
 
-> **Deprecated / hidden flags**: `--sharded`, `--seekable`, `--preprocess`, `--katana` – these experimental or legacy options are no longer maintained and will be removed in a future release.
+> **Deprecated / hidden flags**: `--sharded`, `--seekable`, `--preprocess` – these experimental or legacy options have been removed from the public CLI.
 
 ## AutoTune Technology
 

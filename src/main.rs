@@ -112,9 +112,8 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
     let command = cli::run()?;
 
     match &command {
-        Commands::Create { sharded: _, katana, inputs, output, level: _, workers, threads, codec_threads, memory_budget, password, progress, skip_check, .. } => {
-            if *katana {
-                // Katana: new sharded MT format with optional progress
+        Commands::Create { sharded: _, inputs, output, level: _, workers: _, threads, codec_threads, memory_budget, password, progress, skip_check, .. } => {
+            // Katana stream (default):
                 let do_paranoid = !*skip_check; // secure by default
                 let auto_threads = if *threads == 0 { num_cpus::get() } else { *threads };
 
@@ -162,14 +161,7 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
                         perform_paranoid_check(output)?;
                     }
                 }
-            } else {
-                // Legacy sharded compression path: sanitize provided output path too
-                let mut cmd_clone = command.clone();
-                if let Commands::Create { ref mut output, .. } = cmd_clone {
-                    *output = cli::sanitize_output_path(output);
-                }
-                workers::run_parallel_compression(Arc::new(cmd_clone), *workers)?;
-            }
+
         }
         Commands::Extract {
             archive,
@@ -178,8 +170,8 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
             password,
             strip_components,
             progress,
+            ..
         } => {
-            if blitzarch::katana::is_katana_archive(archive)? {
                 let out_dir = output.as_ref().ok_or("--output is required for Katana extract")?;
                 let pass = cli::get_password_from_opt_or_env(password.clone())?;
                 
@@ -192,10 +184,7 @@ fn run_cli_app() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     blitzarch::katana::extract_katana_archive_internal(archive, out_dir, files, pass, *strip_components)?;
                 }
-            } else {
-                let pass = cli::get_password_from_opt_or_env(password.clone())?;
-                extract::extract_files(archive, files, pass.as_deref(), output.as_deref(), *strip_components).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-            }
+
         }
         Commands::List { archive } => {
             let file = File::open(archive)?;

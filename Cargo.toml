@@ -113,6 +113,11 @@ name = "marketing_random_access"
 path = "benches/marketing_random_access.rs"
 harness = false
 
+
+[[bin]]
+name = "blitzarch-cli"
+path = "src/bin/blitzarch-cli.rs"
+
 [workspace]
 members = [
     "gui/src-tauri",

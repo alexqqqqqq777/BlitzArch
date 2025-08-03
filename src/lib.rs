@@ -40,6 +40,7 @@ pub mod error;
 pub use error::ArchiverError;
 
 pub mod workers;
+pub mod cli_runner;
 pub mod zstd_block;
 pub mod progress;
 pub mod katana;

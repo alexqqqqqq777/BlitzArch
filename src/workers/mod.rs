@@ -204,3 +204,48 @@ let (compressed_sender, compressed_receiver) = bounded::<WorkerBundle>(num_worke
     }
 }
 
+// -----------------------------------------------------------------------------
+// Legacy compatibility wrappers for CLI runner (temporary)
+// -----------------------------------------------------------------------------
+use std::path::{Path, PathBuf};
+use crate::progress::ProgressState;
+
+#[allow(clippy::too_many_arguments)]
+pub fn create_archive_parallel(
+    inputs: &[PathBuf],
+    output: &PathBuf,
+    _level: i32,
+    threads: usize,
+    codec_threads: u32,
+    password: Option<&str>,
+    _do_paranoid: bool,
+    progress_cb: Option<Box<dyn Fn(ProgressState) + Send + Sync>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    crate::katana::create_katana_archive_with_progress(
+        inputs,
+        Path::new(output),
+        threads,
+        codec_threads,
+        None,
+        password.map(|s| s.to_string()),
+        progress_cb,
+    )
+}
+
+pub fn create_archive_single(
+    inputs: &[PathBuf],
+    output: &PathBuf,
+    _level: i32,
+    password: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    crate::katana::create_katana_archive_with_progress::<fn(ProgressState)>(
+        inputs,
+        Path::new(output),
+        1,
+        0,
+        None,
+        password.map(|s| s.to_string()),
+        None,
+    )
+}
+
