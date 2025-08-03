@@ -15,7 +15,7 @@ jobs:
 
       - name: Install Rust targets
         run: |
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin universal-apple-darwin
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -24,7 +24,7 @@ jobs:
 
       #––– Build & bundle via Tauri –––––––––––––––––––––––––––––––––––––––––––
       - name: Build Tauri (universal)
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0.5.22
         env:
           # Code-signing / notarization secrets – set in repo → Settings → Secrets and variables → Actions
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
