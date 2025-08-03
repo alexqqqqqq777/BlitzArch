@@ -43,7 +43,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           args: --target aarch64-apple-darwin
           releaseDraft: false
-          tagName: ${{ github.ref_name }}
+        
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -78,7 +78,7 @@ jobs:
         with:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           releaseDraft: false
-          tagName: ${{ github.ref_name }}
+        
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
