@@ -39,6 +39,7 @@ jobs:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
 
         with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
           args: --target aarch64-apple-darwin
           releaseDraft: false
           tagName: ${{ github.ref_name }}
@@ -73,6 +74,7 @@ jobs:
         env:
           RING_ALLOW_MISSING_ARM_FEATURES: 1
         with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
           releaseDraft: false
           tagName: ${{ github.ref_name }}
 
