@@ -59,7 +59,7 @@ jobs:
 
       - name: Install GUI dependencies
         working-directory: gui
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Build Tauri GUI (windows)
         uses: tauri-apps/tauri-action@v0.5.22
