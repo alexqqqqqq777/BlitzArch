@@ -21,6 +21,14 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GUI dependencies
+        working-directory: gui
+        run: npm install --legacy-peer-deps
+
       - name: Build Tauri GUI (arm64)
         uses: tauri-apps/tauri-action@v0.5.22
         env:
