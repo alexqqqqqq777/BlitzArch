@@ -1,41 +1,27 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// BlitzArch unified binary: acts as CLI when invoked with subcommands; otherwise starts the GUI.
+use std::process::ExitCode;
 
-use std::env;
-use std::process::{Command, exit};
+fn try_cli_mode() -> Option<ExitCode> {
+    let mut args = std::env::args();
+    let _exe = args.next();
+    let Some(first) = args.next() else { return None };
 
-fn main() {
-  // macOS: если программа запущена с аргументами → предполагаем CLI-режим.
-  // Переправляем вызов во встроенный бинарь `blitzarch-cli`, расположенный рядом
-  // с GUI-исполняемым файлом. Это позволяет использовать одну и ту же .app
-  // как для графики, так и для терминала без запуска оконного интерфейса.
-  #[cfg(target_os = "macos")]
-  if env::args().len() > 1 {
-    if let Ok(current_exe) = env::current_exe() {
-      if let Some(parent_dir) = current_exe.parent() {
-        let cli_exe = parent_dir.join("blitzarch-cli");
-        if cli_exe.exists() {
-          // Запускаем CLI с теми же аргументами (кроме имени программы)
-          match Command::new(&cli_exe)
-            .args(env::args().skip(1))
-            .status() {
-              Ok(status) => {
-                // Прокидываем код выхода из дочернего процесса
-                match status.code() {
-                  Some(code) => exit(code),
-                  None => exit(1),
-                }
-              }
-              Err(e) => {
-                eprintln!("❌ Не удалось запустить blitzarch-cli: {}", e);
-                // падать не будем — откатываемся к GUI
-              }
+    match first.as_str() {
+        "create" | "extract" | "list" | "help" | "-h" | "--help" => {
+            if let Err(e) = blitzarch::cli_runner::run_cli_app() {
+                eprintln!("Error: {e}");
+                return Some(ExitCode::FAILURE);
             }
+            Some(ExitCode::SUCCESS)
         }
-      }
+        _ => None,
     }
-  }
+}
 
-  // GUI (default path)
-  app_lib::run();
+fn main() -> ExitCode {
+    if let Some(code) = try_cli_mode() {
+        return code;
+    }
+    app_lib::run();
+    ExitCode::SUCCESS
 }
