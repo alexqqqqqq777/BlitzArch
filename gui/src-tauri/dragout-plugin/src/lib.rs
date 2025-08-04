@@ -37,10 +37,5 @@ pub mod macos;
 #[cfg(all(target_os = "macos", feature = "objc2_backend"))]
 pub mod macos_objc2;
 
-#[cfg(target_os = "windows")]
-mod windows_impl {
-    pub fn init() {
-        // TODO: implement COM IDataObject logic
-        println!("[dragout] Windows plugin loaded (stub)");
-    }
-}
+#[cfg(not(target_os = "macos"))]
+compile_error!("tauri-plugin-dragout currently supports only macOS");

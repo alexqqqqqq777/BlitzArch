@@ -144,6 +144,7 @@ fn get_delegate_class() -> &'static Class {
         unsafe {
             use std::ffi::CStr;
             use std::os::raw::c_char;
+            #[allow(unused_imports)]
             use std::path::{Path, PathBuf};
             use objc::runtime::Object;
 
@@ -184,17 +185,10 @@ fn get_delegate_class() -> &'static Class {
 
             println!("[dragout] write_promise: rel_path='{}' arch='{}' dest='{}' strip={:?}", rel_path, arch_path, dest_root.display(), strip);
 
-            let files = vec![rel_path_pb.clone()];
-            match blitzarch::extract::extract_files(
-                Path::new(&arch_path),
-                &files,
-                None,
-                Some(dest_root.as_path()),
-                strip,
-            ) {
-                Ok(_) => println!("[dragout] extracted {} -> {}", rel_path, dest_path.display()),
-                Err(e) => println!("[dragout][err] extract failed: {:?}", e),
-            }
+            
+
+            println!("[dragout] extraction logic removed in published version");
+            
 
             // Invoke completion handler block with nil to signal success
             if !_completion.is_null() {
@@ -265,6 +259,7 @@ fn get_delegate_class() -> &'static Class {
         extern "C" fn names_promised(this: &Object, _sel: Sel, dest_url: id) -> id {
             use std::ffi::CStr;
             use std::os::raw::c_char;
+            #[allow(unused_imports)]
             use std::path::{Path, PathBuf};
             println!("[dragout] namesOfPromisedFilesDroppedAtDestination called");
             unsafe {
@@ -283,10 +278,10 @@ fn get_delegate_class() -> &'static Class {
                     return nil;
                 }
                 let rel_path = CStr::from_ptr(c_src).to_string_lossy().into_owned();
-                let arch_path = CStr::from_ptr(c_arch).to_string_lossy().into_owned();
+                let _arch_path = CStr::from_ptr(c_arch).to_string_lossy().into_owned();
                 let dest_dir = CStr::from_ptr(c_dest).to_string_lossy().into_owned();
 
-                let rel_path_pb = PathBuf::from(&rel_path);
+                let _rel_path_pb = PathBuf::from(&rel_path);
                 let dest_root = PathBuf::from(&dest_dir);
                 if let Err(e) = std::fs::create_dir_all(&dest_root) {
                     println!("[dragout][err] create_dir_all failed: {:?}", e);

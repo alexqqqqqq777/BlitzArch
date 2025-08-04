@@ -3,10 +3,16 @@ name = "tauri-plugin-dragout"
 version = "0.1.0"
 edition = "2021"
 links = "tauri-plugin-dragout"
+description = "Tauri plugin providing native macOS drag-out (file promise) support"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/blitzarch/tauri-plugin-dragout"
+readme = "README.md"
+keywords = ["tauri", "plugin", "drag-and-drop", "macos"]
+categories = ["gui", "os::macos-apis", "development-tools::ffi"]
 
 [dependencies]
 tauri = "2"
-blitzarch = { path = "../../../" }
+
 
 # macOS-specific dependencies (Core Foundation, Cocoa framework)
 # These should NOT compile on Windows/Linux to avoid unix::io errors
@@ -23,11 +29,11 @@ cocoa = "0.26.1"
 once_cell = "1.19"
 dispatch = "0.2"
 
-# Windows-specific dependencies
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.54", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_System_Com"] }
+
 
 [features]
+default = []
+blitzarch_backend = []
 objc2_backend = []
 
 [lib]
