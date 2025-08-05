@@ -1,7 +1,7 @@
 {
   "name": "blitzarch-gui",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "BlitzArch GUI - High-performance archive management interface",
   "type": "module",
   "scripts": {
