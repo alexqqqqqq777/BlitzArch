@@ -1,3 +1,5 @@
+#![cfg(feature = "memory_profile")]
+
 #[global_allocator]
 static ALLOCATOR: dhat::Alloc = dhat::Alloc;
 

@@ -185,7 +185,7 @@ fn build_output_path(output_dir: &str, raw_archive_name: &str) -> std::path::Pat
     // Need the original Path object for extension check
     let raw_path = Path::new(raw_archive_name);
 
-    let mut filename = if raw_path
+    let filename = if raw_path
         .extension()
         .map(|e| e.to_str().unwrap_or("") == "blz")
         .unwrap_or(false)
@@ -1076,6 +1076,7 @@ pub fn list_archive(archive_path: String) -> Result<ArchiveResult, String> {
 
 // Tauri command to extract single file for drag-out
 #[tauri::command]
+#[allow(unreachable_code, unused_variables, unused_mut)]
 pub async fn drag_out_extract(
     app: AppHandle,
     archive_path: String,
@@ -1136,7 +1137,7 @@ pub async fn drag_out_extract(
     match result {
         Ok(mut archive_result) => {
             // Set the actual file path for the extracted file (just filename for drag-out)
-            let file_name = std::path::Path::new(&file_path)
+            let _file_name = std::path::Path::new(&file_path)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("extracted_file");

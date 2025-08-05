@@ -12,6 +12,7 @@ categories = ["gui", "os::macos-apis", "development-tools::ffi"]
 
 [dependencies]
 tauri = "2"
+blitzarch = { version = "0.1.0", optional = true }
 
 
 # macOS-specific dependencies (Core Foundation, Cocoa framework)
@@ -33,7 +34,7 @@ dispatch = "0.2"
 
 [features]
 default = []
-blitzarch_backend = []
+blitzarch_backend = ["blitzarch"]
 objc2_backend = []
 
 [lib]

@@ -1,9 +1,6 @@
 Dataset,Profile,Archiver,Files,Source Size,Archive Size,Ratio,Create Time (Wall/CPU),Create TP (MB/s),Create Peak Mem,Extract Time (Wall/CPU),Extract TP (MB/s),Extract Peak Mem
-aatrnnbdye,L3_katana_mem_500,BlitzArch,308534,7003.99 MiB,4514.26 MiB,1.55x,30.48s / 28.33s,229.79,464.44 MiB,27.44s / 86.22s,255.25,251.86 MiB
-aatrnnbdye,L3_katana_mem_3pct,BlitzArch,308534,7003.99 MiB,4514.26 MiB,1.55x,29.68s / 25.52s,235.98,524.98 MiB,25.28s / 86.27s,277.06,204.23 MiB
-DATASET,L3_katana_mem_500,BlitzArch,70016,5211.64 MiB,998.46 MiB,5.22x,8.98s / 14.83s,580.36,274.47 MiB,10.93s / 23.86s,476.82,63.91 MiB
-DATASET,L3_katana_mem_3pct,BlitzArch,70016,5211.64 MiB,998.46 MiB,5.22x,10.07s / 14.15s,517.54,291.27 MiB,10.69s / 24.43s,487.52,63.27 MiB
-.venv,L3_katana_mem_500,BlitzArch,9094,253.96 MiB,68.67 MiB,3.70x,0.81s / 1.53s,313.53,248.67 MiB,0.74s / 3.12s,343.19,32.83 MiB
-.venv,L3_katana_mem_3pct,BlitzArch,9094,253.96 MiB,68.67 MiB,3.70x,0.45s / 1.69s,564.35,253.89 MiB,0.87s / 3.35s,291.91,32.98 MiB
-scripts,L3_katana_mem_500,BlitzArch,2,0.00 MiB,0.00 MiB,2.08x,0.01s / 0.01s,0.46,21.52 MiB,0.00s / 0.00s,0.00,4.48 MiB
-scripts,L3_katana_mem_3pct,BlitzArch,2,0.00 MiB,0.00 MiB,2.08x,0.00s / 0.01s,0.00,21.50 MiB,0.00s / 0.00s,0.00,4.45 MiB
+DATASET,L3_katana_mem_500,BlitzArch,70016,914.84 MiB,262.52 MiB,3.48x,3.75s / 6.44s,243.96,461.67 MiB,4.54s / 19.05s,201.51,95.03 MiB
+DATASET,L3,tar+zstd,70016,914.84 MiB,265.21 MiB,3.45x,31.83s / 26.10s,28.74,123.17 MiB,29.53s / 26.85s,30.98,6.56 MiB
+DATASET,L5,pigz,70016,914.84 MiB,264.21 MiB,3.46x,35.13s / 37.43s,26.04,8.98 MiB,28.55s / 26.08s,32.04,3.19 MiB
+DATASET,L5,xz,70016,914.84 MiB,237.13 MiB,3.86x,48.11s / 176.46s,19.02,1042.36 MiB,27.89s / 34.37s,32.80,625.38 MiB
+DATASET,F3,gtar+zstd_fast,70016,914.84 MiB,286.73 MiB,3.19x,8.79s / 2.79s,104.08,31.67 MiB,6.12s / 6.45s,149.48,5.06 MiB

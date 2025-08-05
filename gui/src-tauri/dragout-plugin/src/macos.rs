@@ -187,7 +187,25 @@ fn get_delegate_class() -> &'static Class {
 
             
 
-            println!("[dragout] extraction logic removed in published version");
+            #[cfg(feature = "blitzarch_backend")]
+            {
+                let files = vec![rel_path_pb.clone()];
+                match blitzarch::extract::extract_files(
+                    Path::new(&arch_path),
+                    &files,
+                    None,
+                    Some(dest_root.as_path()),
+                    strip,
+                ) {
+                    Ok(_) => println!("[dragout] extracted {} -> {}", rel_path, dest_path.display()),
+                    Err(e) => println!("[dragout][err] extract failed: {:?}", e),
+                }
+            }
+
+            #[cfg(not(feature = "blitzarch_backend"))]
+            {
+                println!("[dragout] blitzarch_backend feature disabled; skipping extraction");
+            }
             
 
             // Invoke completion handler block with nil to signal success

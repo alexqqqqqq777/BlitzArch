@@ -33,5 +33,8 @@ sanitize-filename = "0.5"
 dirs = "5.0"
 zstd = "0.13"
 blitzarch = { path = "../../" }
-tauri-plugin-dragout = { path = "dragout-plugin" }
+tauri-plugin-dragout = { path = "dragout-plugin", features = ["blitzarch_backend"] }
+
+[patch.crates-io]
+blitzarch = { path = "../../" }
 

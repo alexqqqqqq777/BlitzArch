@@ -118,6 +118,9 @@ harness = false
 name = "blitzarch-cli"
 path = "src/bin/blitzarch-cli.rs"
 
+[patch.crates-io]
+blitzarch = { path = "." }
+
 [workspace]
 members = [
     "gui/src-tauri",
