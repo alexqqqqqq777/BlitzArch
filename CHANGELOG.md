@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0] - 2025-08-05
+### Added
+- **Cross-platform release pipeline**: automated macOS ARM GUI, Windows GUI, and Linux CLI builds with attached artifacts and draft release.
+- **Version sync**: all components bumped to 0.3.0 and unified.
+
+### Changed
+- Suppressed all compiler warnings across benches and tests for cleaner CI logs.
+- Updated dependencies (Rust + JS) to latest stable compatible versions via `@tauri-apps/cli 2.6.x`.
+
+### Fixed
+- CI failures on macOS due to optional features in `tauri-plugin-dragout`.
+
+### Infrastructure
+- Added Release Drafter configuration to generate changelog drafts automatically.
+- Introduced conventional commit tagging guidance in `CONTRIBUTING.md`.
+
+
+
 All notable changes to this project will be documented in this file.
 
 ## [0.1.0] - 2025-07-29

@@ -1,0 +1,25 @@
+name-template: "v$RESOLVED_VERSION"
+version-resolver:
+  major:
+    labels: ["breaking"]
+  minor:
+    labels: ["feature", "enhancement"]
+  patch:
+    labels: ["fix", "bug"]
+  default: patch
+categories:
+  - title: "🚀 Features"
+    labels: ["feature", "enhancement"]
+  - title: "🐛 Fixes"
+    labels: ["fix", "bug"]
+  - title: "🧰 Maintenance"
+    labels: ["chore", "refactor", "infra"]
+  - title: "📝 Documentation"
+    labels: ["docs"]
+change-template: "- $TITLE (#$NUMBER)"
+template: |
+  ## Changes
+  $CHANGES
+
+  ## Contributors
+  $CONTRIBUTORS
