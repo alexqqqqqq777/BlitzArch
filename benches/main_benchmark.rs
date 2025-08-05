@@ -1,4 +1,5 @@
 // benches/main_benchmark.rs
+#![allow(dead_code, unused_variables, unused_assignments, unused_mut, unused_imports)]
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;

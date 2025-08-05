@@ -1,4 +1,5 @@
 // benches/real_data_benchmark.rs
+#![allow(dead_code, unused_variables, unused_assignments, unused_mut, unused_imports)]
 
 use std::env;
 use std::error::Error;
