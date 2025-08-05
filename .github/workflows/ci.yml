@@ -50,7 +50,6 @@ jobs:
         run: |
           cargo check --workspace --all-targets
           cd gui/src-tauri
-          cd gui/src-tauri
           cargo check --all-targets --target aarch64-apple-darwin
 
   windows:
@@ -75,6 +74,5 @@ jobs:
         shell: bash
         run: |
           cargo check --workspace --all-targets
-          cd gui/src-tauri
           cd gui/src-tauri
           cargo check --all-targets
