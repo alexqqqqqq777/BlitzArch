@@ -5,6 +5,7 @@ pub use commands::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    #[cfg(target_os = "macos")]
     .plugin(tauri_plugin_dragout::init())
     
     .plugin(tauri_plugin_dialog::init())

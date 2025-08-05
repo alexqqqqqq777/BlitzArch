@@ -34,6 +34,7 @@ regex = "1.0"
 sanitize-filename = "0.5"
 dirs = "5.0"
 zstd = "0.13"
+blitzarch = { path = "../../" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dragout = "0.1.1"
