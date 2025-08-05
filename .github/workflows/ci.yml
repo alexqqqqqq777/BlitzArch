@@ -23,11 +23,7 @@ jobs:
 
       - name: Cargo check (workspace)
         run: |
-          cargo check --workspace --all-targets
-          # Check GUI crate separately to run inside its directory
-          cd gui/src-tauri
-          cd gui/src-tauri
-          cargo check --all-targets
+          cargo check --workspace --all-targets --exclude app
 
   macos:
     name: macOS cargo check + GUI deps
