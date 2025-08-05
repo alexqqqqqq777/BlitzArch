@@ -1,6 +1,6 @@
 [package]
 name = "blitzarch"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "A blazingly fast, parallel-first file archiver with a focus on high performance for modern hardware."
 license = "GPL-3.0-only OR BlitzArch-Commercial"
@@ -124,5 +124,5 @@ blitzarch = { path = "." }
 [workspace]
 members = [
     "gui/src-tauri",
-    "gui/src-tauri/dragout-plugin",
+
 ]

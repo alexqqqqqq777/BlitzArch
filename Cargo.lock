@@ -198,7 +198,6 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 name = "app"
 version = "0.2.0"
 dependencies = [
- "blitzarch",
  "dirs 5.0.1",
  "log",
  "regex",
@@ -5116,6 +5115,8 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-dragout"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3dc9365c69fbd5e05b3ce8d6e9c703e9add9a7d6af8ae4d59e6d6ff49f3b9e1"
 dependencies = [
  "block2 0.5.1",
  "cocoa",
