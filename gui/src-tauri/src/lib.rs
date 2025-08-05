@@ -4,10 +4,15 @@ pub use commands::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    #[cfg(target_os = "macos")]
-    .plugin(tauri_plugin_dragout::init())
-    
+  // Base builder
+  let mut builder = tauri::Builder::default();
+  // macOS-only plugin
+  #[cfg(target_os = "macos")]
+  {
+      builder = builder.plugin(tauri_plugin_dragout::init());
+  }
+
+  builder
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
         create_archive,
