@@ -62,7 +62,7 @@ fn katana_unicode_filenames_roundtrip() {
 #[test]
 fn katana_windows_path_handling() {
     use std::fs;
-    use std::io::Write;
+
     
     // Симулируем обработку Windows-путей в коде
     // Создаем различные варианты Windows-путей

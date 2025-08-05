@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 #![cfg(feature = "memory_profile")]
 
 #[global_allocator]
