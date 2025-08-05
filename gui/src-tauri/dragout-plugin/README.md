@@ -1,5 +1,7 @@
 # tauri-plugin-dragout
 
+[![Crates.io](https://img.shields.io/crates/v/tauri-plugin-dragout.svg)](https://crates.io/crates/tauri-plugin-dragout)
+
 Native **drag-out** (file promise) support for Tauri applications on **macOS**.
 
 Finder and most Mac apps support dragging a file _out_ of an application before it
@@ -64,6 +66,12 @@ await window.__TAURI__.invoke("native_drag_out", {
 
 PRs and bug reports are welcome! The native part is Objective-C and can be
 tricky – tests and sample projects live under `examples/` to help you iterate.
+
+---
+
+## Author
+
+Created by **[Oleksandr](https://github.com/alexqqqqqq777)**. If this plugin helped you, please star the repo or say thanks!
 
 ---
 
