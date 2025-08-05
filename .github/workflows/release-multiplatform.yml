@@ -122,9 +122,19 @@ jobs:
         with:
           path: ./artifacts
 
+      - name: Generate SHA-256 checksums
+        run: |
+          cd artifacts
+          find . -type f -exec sha256sum {} \; | tee ../CHECKSUMS.txt
+          printf '### SHA-256 checksums\n\n| File | SHA-256 |\n| ---- | ------- |\n' > ../checksums.md
+          awk '{printf "| %s | %s |\n", substr($2,3), $1}' ../CHECKSUMS.txt >> ../checksums.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
           tag_name: ${{ github.ref_name }}
-          files: ./artifacts/**/*
+          files: |
+            ./artifacts/**/*
+            CHECKSUMS.txt
+          body_path: checksums.md
