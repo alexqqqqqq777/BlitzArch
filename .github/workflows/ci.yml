@@ -1,0 +1,81 @@
+name: CI Check (Linux, macOS, Windows)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# Cancel redundant runs for the same PR/branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux cargo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo check (workspace)
+        run: |
+          cargo check --workspace --locked --all-targets
+          # Check GUI crate separately to run inside its directory
+          cd gui/src-tauri
+          cargo check --locked --all-targets
+
+  macos:
+    name: macOS cargo check + GUI deps
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add aarch64 target (for universal build)
+        run: rustup target add aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GUI npm deps
+        working-directory: gui
+        run: npm install --legacy-peer-deps
+
+      - name: Cargo check (workspace)
+        run: |
+          cargo check --workspace --locked --all-targets
+          cd gui/src-tauri
+          cargo check --locked --all-targets --target aarch64-apple-darwin
+
+  windows:
+    name: Windows cargo check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GUI npm deps
+        working-directory: gui
+        run: npm install --legacy-peer-deps
+
+      - name: Cargo check (workspace)
+        shell: bash
+        run: |
+          cargo check --workspace --locked --all-targets
+          cd gui/src-tauri
+          cargo check --locked --all-targets
