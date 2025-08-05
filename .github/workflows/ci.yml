@@ -23,10 +23,11 @@ jobs:
 
       - name: Cargo check (workspace)
         run: |
-          cargo check --workspace --locked --all-targets
+          cargo check --workspace --all-targets
           # Check GUI crate separately to run inside its directory
           cd gui/src-tauri
-          cargo check --locked --all-targets
+          cd gui/src-tauri
+          cargo check --all-targets
 
   macos:
     name: macOS cargo check + GUI deps
@@ -51,9 +52,10 @@ jobs:
 
       - name: Cargo check (workspace)
         run: |
-          cargo check --workspace --locked --all-targets
+          cargo check --workspace --all-targets
           cd gui/src-tauri
-          cargo check --locked --all-targets --target aarch64-apple-darwin
+          cd gui/src-tauri
+          cargo check --all-targets --target aarch64-apple-darwin
 
   windows:
     name: Windows cargo check
@@ -76,6 +78,7 @@ jobs:
       - name: Cargo check (workspace)
         shell: bash
         run: |
-          cargo check --workspace --locked --all-targets
+          cargo check --workspace --all-targets
           cd gui/src-tauri
-          cargo check --locked --all-targets
+          cd gui/src-tauri
+          cargo check --all-targets
